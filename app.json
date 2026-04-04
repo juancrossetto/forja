@@ -11,10 +11,14 @@
       "resizeMode": "contain",
       "backgroundColor": "#0e0e0e"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "scheme": "metodo-r3set",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.metodo.r3set"
+      "bundleIdentifier": "com.metodo.r3set",
+      "usesAppleSignIn": true
     },
     "android": {
       "adaptiveIcon": {
@@ -26,7 +30,9 @@
     "plugins": [
       "expo-font",
       "expo-image-picker",
-      "expo-camera"
+      "expo-camera",
+      "expo-web-browser",
+      "expo-apple-authentication"
     ]
   }
 }
