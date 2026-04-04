@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "Método R3SET",
+    "slug": "metodo-r3set",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0e0e0e"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.metodo.r3set",
+      "infoPlist": {
+        "NSHealthShareUsageDescription": "Método R3SET necesita acceso a tus datos de salud para mostrarte métricas de pasos, sueño y actividad.",
+        "NSHealthUpdateUsageDescription": "Método R3SET necesita acceso para registrar tus entrenamientos.",
+        "NSCameraUsageDescription": "Método R3SET necesita acceso a la cámara para tomar fotos de progreso.",
+        "NSPhotoLibraryUsageDescription": "Método R3SET necesita acceso a tu galería para seleccionar fotos de progreso."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0e0e0e"
+      },
+      "package": "com.metodo.r3set",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.ACTIVITY_RECOGNITION"
+      ]
+    },
+    "plugins": [
+      "expo-font",
+      "expo-image-picker",
+      "expo-camera",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0e0e0e",
+          "image": "./assets/splash.png",
+          "imageWidth": 200
+        }
+      ]
+    ]
+  }
+}
