@@ -139,8 +139,10 @@ export const EntrenamientosScreen: React.FC = () => {
         </View>
 
         <View style={styles.dayContent}>
-          <View>
-            <Text style={styles.dayTitle}>{item.title}</Text>
+          <View style={styles.dayTextBlock}>
+            <Text style={styles.dayTitle} numberOfLines={1} ellipsizeMode="tail">
+              {item.title}
+            </Text>
             <View style={styles.dayMeta}>
               <Text style={styles.dayMetaText}>
                 {item.duration} MIN
@@ -175,7 +177,7 @@ export const EntrenamientosScreen: React.FC = () => {
               </Text>
             </TouchableOpacity>
           ) : (
-            <Text style={styles.restIcon}>zzz</Text>
+            <Text style={styles.restIcon}>ZZZ</Text>
           )}
         </View>
       </View>
@@ -477,18 +479,22 @@ const styles = StyleSheet.create({
   },
   dayContent: {
     flex: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 12,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
+  },
+  dayTextBlock: {
+    flex: 1,
+    flexShrink: 1,
   },
   dayTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.textPrimary,
     textTransform: 'uppercase',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   dayMeta: {
     flexDirection: 'row',
@@ -507,11 +513,12 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   dayButton: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
     borderColor: 'rgba(72, 72, 71, 0.5)',
     borderRadius: 4,
+    flexShrink: 0,
   },
   dayButtonActive: {
     backgroundColor: colors.textPrimary,

@@ -204,7 +204,7 @@ const ComidasScreen: React.FC = () => {
 
         {/* Header */}
         <View style={styles.header}>
-          <View>
+          <View style={styles.headerLeft}>
             <Text style={styles.headerTitle}>NUTRICIÓN</Text>
             <Text style={[styles.headerTitle, { color: COLORS.primary }]}>CONSCIENTE</Text>
             <View style={styles.headerMeta}>
@@ -326,8 +326,14 @@ const styles = StyleSheet.create({
     color: COLORS.secondary,
     letterSpacing: 0.5,
   },
+  headerLeft: {
+    flex: 1,
+    flexShrink: 1,
+    marginRight: 12,
+  },
   calorieRemaining: {
     alignItems: 'flex-end',
+    flexShrink: 0,
   },
   remainingLabel: {
     fontSize: 10,

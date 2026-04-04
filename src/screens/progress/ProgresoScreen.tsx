@@ -261,11 +261,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   gridLarge: {
-    width: `${(width - 48) * 0.48}%`,
+    width: (width - 48) * 0.48,
     height: 280,
   },
   gridMedium: {
-    width: `${(width - 48) * 0.48}%`,
+    width: (width - 48) * 0.48,
     height: 140,
   },
   cardContent: {
