@@ -9,6 +9,7 @@ import {
   Image,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useAuthStore } from '../../store/authStore';
 
 const COLORS = {
   bg: '#0e0e0e',
@@ -35,6 +36,8 @@ interface Device {
 }
 
 const ProfileScreen: React.FC = () => {
+  const logout = useAuthStore((state) => state.logout);
+
   const devices: Device[] = [
     { name: 'Apple Watch', icon: 'watch', status: 'connected', statusText: 'Conectado' },
     { name: 'Fitbit', icon: 'heart-pulse', status: 'pending', statusText: 'Vincular cuenta' },
@@ -215,7 +218,7 @@ const ProfileScreen: React.FC = () => {
         </View>
 
         {/* Logout Button */}
-        <TouchableOpacity style={styles.logoutButton}>
+        <TouchableOpacity style={styles.logoutButton} onPress={() => logout()}>
           <MaterialCommunityIcons name="logout" size={18} color={COLORS.tertiary} />
           <Text style={styles.logoutButtonText}>Cerrar Sesión</Text>
         </TouchableOpacity>

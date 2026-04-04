@@ -84,7 +84,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
               onPress={() => handleSocialLogin('apple')}
               disabled={loading}
             >
-              <Text style={styles.socialButtonIcon}>􀀶</Text>
+              <Text style={styles.socialButtonIcon}>🍎</Text>
               <Text style={styles.socialButtonText}>Apple</Text>
             </TouchableOpacity>
 
@@ -93,7 +93,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
               onPress={() => handleSocialLogin('google')}
               disabled={loading}
             >
-              <Text style={styles.socialButtonIcon}>􀀷</Text>
+              <Text style={styles.socialButtonIcon}>G</Text>
               <Text style={styles.socialButtonText}>Google</Text>
             </TouchableOpacity>
           </View>
@@ -158,7 +158,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
                   disabled={loading}
                 >
                   <Text style={styles.visibilityIcon}>
-                    {showPassword ? '􀁟' : '􀁞'}
+                    {showPassword ? '👁' : '🔒'}
                   </Text>
                 </TouchableOpacity>
               </View>
