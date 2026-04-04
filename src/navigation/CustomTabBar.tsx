@@ -7,27 +7,30 @@ import {
   Platform,
   ViewStyle,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import Icon from './Icon';
 
 const PRIMARY = '#D1FF26';
 const INACTIVE_COLOR = 'rgba(255, 255, 255, 0.40)';
 const ACTIVE_COLOR = PRIMARY;
 const TAB_BG = 'rgba(14, 14, 14, 0.92)';
 
+type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
+
 interface TabItem {
   name: string;
   label: string;
-  iconName: string;
+  iconActive: IoniconsName;
+  iconInactive: IoniconsName;
   isFab?: boolean;
 }
 
 const TABS: TabItem[] = [
-  { name: 'HomeStack', label: 'Inicio', iconName: 'home' },
-  { name: 'TrainingStack', label: 'Entreno', iconName: 'fitness' },
-  { name: 'AddMenu', label: '', iconName: 'add', isFab: true },
-  { name: 'NutritionStack', label: 'Comidas', iconName: 'restaurant' },
-  { name: 'ProgressStack', label: 'Progreso', iconName: 'stats-chart' },
+  { name: 'HomeStack',     label: 'Inicio',  iconActive: 'home',           iconInactive: 'home-outline' },
+  { name: 'TrainingStack', label: 'Entreno', iconActive: 'barbell',        iconInactive: 'barbell-outline' },
+  { name: 'AddMenu',       label: '',        iconActive: 'add',            iconInactive: 'add', isFab: true },
+  { name: 'NutritionStack',label: 'Comidas', iconActive: 'restaurant',     iconInactive: 'restaurant-outline' },
+  { name: 'ProgressStack', label: 'Progreso',iconActive: 'stats-chart',    iconInactive: 'stats-chart-outline' },
 ];
 
 interface CustomTabBarProps extends BottomTabBarProps {
@@ -50,54 +53,29 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({
           if (!tab) return null;
 
           const onPress = () => {
-            if (tab.isFab) {
-              onAddPress?.();
-              return;
-            }
-
-            const event = navigation.emit({
-              type: 'tabPress',
-              target: route.key,
-              canPreventDefault: true,
-            });
-
-            if (!isFocused && !event.defaultPrevented) {
-              navigation.navigate(route.name);
-            }
+            if (tab.isFab) { onAddPress?.(); return; }
+            const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+            if (!isFocused && !event.defaultPrevented) navigation.navigate(route.name);
           };
 
           if (tab.isFab) {
             return (
               <View key={route.key} style={styles.fabWrapper}>
-                <TouchableOpacity
-                  onPress={onPress}
-                  style={styles.fabButton}
-                  activeOpacity={0.8}
-                >
-                  <Icon name="add" size={30} color="#0e0e0e" />
+                <TouchableOpacity onPress={onPress} style={styles.fabButton} activeOpacity={0.8}>
+                  <Ionicons name="add" size={32} color="#0e0e0e" />
                 </TouchableOpacity>
               </View>
             );
           }
 
           return (
-            <TouchableOpacity
-              key={route.key}
-              onPress={onPress}
-              style={styles.tabButton}
-              activeOpacity={0.7}
-            >
-              <Icon
-                name={tab.iconName}
+            <TouchableOpacity key={route.key} onPress={onPress} style={styles.tabButton} activeOpacity={0.7}>
+              <Ionicons
+                name={isFocused ? tab.iconActive : tab.iconInactive}
                 size={22}
                 color={isFocused ? ACTIVE_COLOR : INACTIVE_COLOR}
               />
-              <Text
-                style={[
-                  styles.tabLabel,
-                  { color: isFocused ? ACTIVE_COLOR : INACTIVE_COLOR },
-                ]}
-              >
+              <Text style={[styles.tabLabel, { color: isFocused ? ACTIVE_COLOR : INACTIVE_COLOR }]}>
                 {tab.label}
               </Text>
               {isFocused && <View style={styles.activeIndicator} />}
@@ -116,7 +94,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: TAB_BG,
-    borderTopWidth: 0,
   },
   tabBarContent: {
     flexDirection: 'row',

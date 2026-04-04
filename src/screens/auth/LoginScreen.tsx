@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useAuthStore } from '../../stores/authStore';
+import { useAuthStore } from '../../store/authStore';
 
 type LoginScreenProps = {
   navigation: NativeStackNavigationProp<any>;

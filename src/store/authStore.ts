@@ -1,5 +1,12 @@
 import { create } from 'zustand';
-import { User, UserLevel, Gender } from '../types';
+import { supabase } from '../lib/supabase';
+
+interface User {
+  id: string;
+  email: string;
+  name: string;
+  avatar?: string;
+}
 
 interface AuthState {
   user: User | null;
@@ -7,27 +14,11 @@ interface AuthState {
   isLoading: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
-  signup: (data: {
-    name: string;
-    email: string;
-    password: string;
-    gender: Gender;
-  }) => Promise<void>;
+  signup: (email: string, password: string, name: string) => Promise<void>;
   logout: () => Promise<void>;
-  updateProfile: (data: Partial<User>) => Promise<void>;
   clearError: () => void;
+  checkSession: () => Promise<void>;
 }
-
-// Mock user data
-const MOCK_USER: User = {
-  id: 'user_001',
-  name: 'Carlos Mendez',
-  email: 'carlos@metodor3set.com',
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Carlos',
-  level: 'pro',
-  memberSince: new Date('2023-06-15'),
-  gender: 'male',
-};
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
@@ -35,106 +26,72 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: false,
   error: null,
 
-  login: async (email: string, password: string) => {
-    set({ isLoading: true, error: null });
+  checkSession: async () => {
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 800));
-
-      if (email === 'carlos@metodor3set.com' && password === 'password') {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
         set({
-          user: MOCK_USER,
+          user: {
+            id: session.user.id,
+            email: session.user.email ?? '',
+            name: session.user.user_metadata?.name ?? session.user.email ?? '',
+            avatar: session.user.user_metadata?.avatar_url,
+          },
           isAuthenticated: true,
-          isLoading: false,
         });
-      } else {
-        throw new Error('Credenciales inválidas');
       }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Error al iniciar sesión';
-      set({
-        isLoading: false,
-        error: errorMessage,
-        isAuthenticated: false,
-      });
-      throw error;
+    } catch (e) {
+      // No session
     }
   },
 
-  signup: async (data) => {
+  login: async (email: string, password: string) => {
     set({ isLoading: true, error: null });
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      if (data.user) {
+        set({
+          user: {
+            id: data.user.id,
+            email: data.user.email ?? '',
+            name: data.user.user_metadata?.name ?? data.user.email ?? '',
+            avatar: data.user.user_metadata?.avatar_url,
+          },
+          isAuthenticated: true,
+          isLoading: false,
+        });
+      }
+    } catch (error: any) {
+      set({ error: error.message ?? 'Error al iniciar sesión', isLoading: false });
+    }
+  },
 
-      const newUser: User = {
-        id: `user_${Date.now()}`,
-        name: data.name,
-        email: data.email,
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.name}`,
-        level: 'beginner',
-        memberSince: new Date(),
-        gender: data.gender,
-      };
-
-      set({
-        user: newUser,
-        isAuthenticated: true,
-        isLoading: false,
+  signup: async (email: string, password: string, name: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { name } },
       });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Error al registrarse';
-      set({
-        isLoading: false,
-        error: errorMessage,
-        isAuthenticated: false,
-      });
-      throw error;
+      if (error) throw error;
+      if (data.user) {
+        set({
+          user: { id: data.user.id, email: data.user.email ?? '', name },
+          isAuthenticated: true,
+          isLoading: false,
+        });
+      }
+    } catch (error: any) {
+      set({ error: error.message ?? 'Error al registrarse', isLoading: false });
     }
   },
 
   logout: async () => {
-    set({ isLoading: true });
-    try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      set({
-        user: null,
-        isAuthenticated: false,
-        isLoading: false,
-        error: null,
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Error al cerrar sesión';
-      set({
-        isLoading: false,
-        error: errorMessage,
-      });
-      throw error;
-    }
+    await supabase.auth.signOut();
+    set({ user: null, isAuthenticated: false, error: null });
   },
 
-  updateProfile: async (data) => {
-    set({ isLoading: true, error: null });
-    try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 600));
-
-      set((state) => ({
-        user: state.user ? { ...state.user, ...data } : null,
-        isLoading: false,
-      }));
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Error al actualizar perfil';
-      set({
-        isLoading: false,
-        error: errorMessage,
-      });
-      throw error;
-    }
-  },
-
-  clearError: () => {
-    set({ error: null });
-  },
+  clearError: () => set({ error: null }),
 }));

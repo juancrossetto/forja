@@ -9,11 +9,10 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  CheckBox,
   Linking,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useAuthStore } from '../../stores/authStore';
+import { useAuthStore } from '../../store/authStore';
 
 type SignUpScreenProps = {
   navigation: NativeStackNavigationProp<any>;
@@ -28,7 +27,7 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const register = useAuthStore((state) => state.register);
+  const signup = useAuthStore((state) => state.signup);
 
   const handleSignUp = async () => {
     if (!username || !email || !password) {
@@ -45,7 +44,7 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation }) => {
     setLoading(true);
 
     try {
-      await register(username, email, password);
+      await signup(email, password, username);
       // Navigation will be handled by the auth store
     } catch (err: any) {
       setError(err.message || 'Error al crear la cuenta');
@@ -117,7 +116,7 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation }) => {
               onPress={() => handleSocialSignUp('apple')}
               disabled={loading}
             >
-              <Text style={styles.socialButtonIcon}>􀀶</Text>
+              <Text style={styles.socialButtonIcon}>🍎</Text>
               <Text style={styles.socialButtonText}>Apple</Text>
             </TouchableOpacity>
           </View>
@@ -195,20 +194,22 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation }) => {
                   disabled={loading}
                 >
                   <Text style={styles.visibilityIcon}>
-                    {showPassword ? '👁' : '👁‍🗨'}
+                    {showPassword ? '👁' : '🔒'}
                   </Text>
                 </TouchableOpacity>
               </View>
             </View>
 
             {/* Terms Checkbox */}
-            <View style={styles.termsContainer}>
-              <CheckBox
-                value={termsAccepted}
-                onValueChange={setTermsAccepted}
-                disabled={loading}
-                style={styles.checkbox}
-              />
+            <TouchableOpacity
+              style={styles.termsContainer}
+              onPress={() => setTermsAccepted(!termsAccepted)}
+              disabled={loading}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
+                {termsAccepted && <Text style={styles.checkmark}>✓</Text>}
+              </View>
               <View style={styles.termsTextContainer}>
                 <Text style={styles.termsText}>
                   I accept the{' '}
@@ -228,7 +229,7 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation }) => {
                   . I understand my data will be used to personalize my R3SET journey.
                 </Text>
               </View>
-            </View>
+            </TouchableOpacity>
 
             {/* Sign Up Button */}
             <TouchableOpacity
@@ -443,7 +444,24 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   checkbox: {
+    width: 20,
+    height: 20,
+    borderWidth: 2,
+    borderColor: 'rgba(72, 72, 71, 0.6)',
+    borderRadius: 4,
     marginTop: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  checkboxChecked: {
+    backgroundColor: '#D1FF26',
+    borderColor: '#D1FF26',
+  },
+  checkmark: {
+    color: '#0e0e0e',
+    fontSize: 12,
+    fontWeight: '900',
   },
   termsTextContainer: {
     flex: 1,

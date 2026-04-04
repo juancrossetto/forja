@@ -14,38 +14,19 @@
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.metodo.r3set",
-      "infoPlist": {
-        "NSHealthShareUsageDescription": "Método R3SET necesita acceso a tus datos de salud para mostrarte métricas de pasos, sueño y actividad.",
-        "NSHealthUpdateUsageDescription": "Método R3SET necesita acceso para registrar tus entrenamientos.",
-        "NSCameraUsageDescription": "Método R3SET necesita acceso a la cámara para tomar fotos de progreso.",
-        "NSPhotoLibraryUsageDescription": "Método R3SET necesita acceso a tu galería para seleccionar fotos de progreso."
-      }
+      "bundleIdentifier": "com.metodo.r3set"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0e0e0e"
       },
-      "package": "com.metodo.r3set",
-      "permissions": [
-        "android.permission.CAMERA",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.ACTIVITY_RECOGNITION"
-      ]
+      "package": "com.metodo.r3set"
     },
     "plugins": [
       "expo-font",
       "expo-image-picker",
-      "expo-camera",
-      [
-        "expo-splash-screen",
-        {
-          "backgroundColor": "#0e0e0e",
-          "image": "./assets/splash.png",
-          "imageWidth": 200
-        }
-      ]
+      "expo-camera"
     ]
   }
 }
