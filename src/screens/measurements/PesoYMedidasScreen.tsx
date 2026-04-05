@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,10 @@ import {
   Alert,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import {
+  getMeasurementsForDate,
+  saveMeasurements,
+} from '../../services/measurementsService';
 
 const { width } = Dimensions.get('window');
 
@@ -45,12 +49,39 @@ const INITIAL_MEASUREMENTS: MeasurementField[] = [
   { id: 'legs', label: 'Piernas', icon: 'walk', value: '', color: '#ff9475' },
 ];
 
+const todayISO = () => new Date().toISOString().split('T')[0];
+
 const PesoYMedidasScreen: React.FC = () => {
   const [gender, setGender] = useState<Gender>('male');
   const [weight, setWeight] = useState('');
   const [bodyFat, setBodyFat] = useState('');
   const [measurements, setMeasurements] = useState<MeasurementField[]>(INITIAL_MEASUREMENTS);
   const [selectedId, setSelectedId] = useState<string>('chest');
+  const [saving, setSaving] = useState(false);
+
+  // Load existing measurements for today on mount
+  useEffect(() => {
+    (async () => {
+      const data = await getMeasurementsForDate(todayISO());
+      if (!data) return;
+      if (data.gender) setGender(data.gender);
+      if (data.weight_kg != null) setWeight(String(data.weight_kg));
+      if (data.body_fat_pct != null) setBodyFat(String(data.body_fat_pct));
+      setMeasurements((prev) =>
+        prev.map((m) => {
+          const fieldMap: Record<string, number | null> = {
+            chest: data.chest_cm,
+            waist: data.waist_cm,
+            hips: data.hips_cm,
+            arms: data.arms_cm,
+            legs: data.legs_cm,
+          };
+          const val = fieldMap[m.id];
+          return val != null ? { ...m, value: String(val) } : m;
+        })
+      );
+    })();
+  }, []);
 
   const updateMeasurement = (id: string, value: string) => {
     setMeasurements((prev) =>
@@ -58,8 +89,26 @@ const PesoYMedidasScreen: React.FC = () => {
     );
   };
 
-  const handleSave = () => {
-    Alert.alert('Guardado', 'Tu registro fue guardado correctamente.');
+  const handleSave = async () => {
+    setSaving(true);
+    const get = (id: string) => {
+      const raw = measurements.find((m) => m.id === id)?.value ?? '';
+      const n = parseFloat(raw);
+      return isNaN(n) ? null : n;
+    };
+    const ok = await saveMeasurements({
+      gender,
+      weight_kg: parseFloat(weight) || null,
+      body_fat_pct: parseFloat(bodyFat) || null,
+      chest_cm: get('chest'),
+      waist_cm: get('waist'),
+      hips_cm: get('hips'),
+      arms_cm: get('arms'),
+      legs_cm: get('legs'),
+    });
+    setSaving(false);
+    if (ok) Alert.alert('Guardado', 'Tu registro fue guardado correctamente.');
+    else Alert.alert('Error', 'No se pudo guardar. Verificá tu conexión.');
   };
 
   return (
@@ -234,8 +283,8 @@ const PesoYMedidasScreen: React.FC = () => {
 
         {/* Save */}
         <View style={styles.actionSection}>
-          <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-            <Text style={styles.saveButtonText}>Guardar Registro</Text>
+          <TouchableOpacity style={[styles.saveButton, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving}>
+            <Text style={styles.saveButtonText}>{saving ? 'Guardando...' : 'Guardar Registro'}</Text>
           </TouchableOpacity>
         </View>
 

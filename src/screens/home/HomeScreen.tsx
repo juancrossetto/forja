@@ -8,13 +8,13 @@ import {
   Image,
   ImageBackground,
   RefreshControl,
-  SafeAreaView,
   FlatList,
   Dimensions,
   ActivityIndicator,
   Modal,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';

@@ -25,7 +25,8 @@ export const MainTabs: React.FC = () => {
   const navigateFromMenu = useCallback((stack: string, screen: string) => {
     setAddMenuVisible(false);
     setTimeout(() => {
-      navigation.navigate(stack, { screen });
+      // Navegar a través del root → Main → stack → screen
+      navigation.navigate('Main' as any, { screen: stack, params: { screen } });
     }, 100);
   }, [navigation]);
 

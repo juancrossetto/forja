@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,417 +7,294 @@ import {
   TouchableOpacity,
   Dimensions,
   Alert,
+  Animated,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import Svg, { Path } from 'react-native-svg';
+import {
+  getHydrationForDate,
+  saveHydration,
+  getWeeklyHydration,
+} from '../../services/hydrationService';
+
+const AnimatedSvg = Animated.createAnimatedComponent(Svg);
 
 const { width } = Dimensions.get('window');
+const BOX_W = width - 48;
+const BOX_H = BOX_W * 0.72;
 
 const COLORS = {
   bg: '#0e0e0e',
   surface: '#1a1a1a',
-  surfaceHigh: '#20201f',
   surfaceHighest: '#262626',
+  surfaceLow: '#131313',
   primary: '#D1FF26',
-  primaryDim: '#c1ed00',
+  primaryContainer: '#cefc22',
   secondary: '#00e3fd',
-  tertiary: '#ff734a',
-  water: '#4dd0e1',
-  waterDim: '#26bcd4',
+  secondaryDim: '#00d4ec',
   text: '#ffffff',
   textVariant: '#adaaaa',
-  borderLight: 'rgba(255,255,255,0.05)',
 };
 
 const GOAL_ML = 3000;
 
-const WEEKDAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+const DAY_LABELS = ['DOM', 'LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB'];
 
-// Mock weekly data
-const WEEKLY_DATA = [
-  { day: 'Lun', ml: 2800 },
-  { day: 'Mar', ml: 3200 },
-  { day: 'Mié', ml: 2100 },
-  { day: 'Jue', ml: 3000 },
-  { day: 'Vie', ml: 2500 },
-  { day: 'Sáb', ml: 1800 },
-  { day: 'Dom', ml: 0 },
-];
+function buildWeekDays() {
+  const days = [];
+  const today = new Date();
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    days.push({
+      date: d.toISOString().split('T')[0],
+      day: DAY_LABELS[d.getDay()],
+      today: i === 0,
+      ml: 0,
+    });
+  }
+  return days;
+}
 
-const HidratacionScreen: React.FC = () => {
-  const [currentMl, setCurrentMl] = useState(1500);
+// Sine wave SVG path
+function wavePath(w: number, h: number, amplitude: number, freq: number, phase: number) {
+  let d = `M 0 ${h}`;
+  for (let x = 0; x <= w; x += 2) {
+    const y = amplitude * Math.sin((x / w) * freq * Math.PI * 2 + phase);
+    d += ` L ${x} ${y + amplitude}`;
+  }
+  d += ` L ${w} ${h} Z`;
+  return d;
+}
 
-  const addWater = useCallback((amount: number) => {
-    setCurrentMl((prev) => {
-      const next = prev + amount;
-      if (next >= GOAL_ML && prev < GOAL_ML) {
-        Alert.alert('Meta alcanzada!', 'Completaste tu objetivo de hidratación del día.');
+function WaterWaves({ progress }: { progress: number }) {
+  const phase1 = useRef(new Animated.Value(0)).current;
+  const phase2 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(phase1, { toValue: 1, duration: 3000, useNativeDriver: false })
+    ).start();
+    Animated.loop(
+      Animated.timing(phase2, { toValue: 1, duration: 4000, useNativeDriver: false })
+    ).start();
+  }, []);
+
+  const fillH = BOX_H * progress;
+  const waveH = 24;
+
+  // We'll use a simple approach: animate translateX on wider SVGs
+  const tx1 = phase1.interpolate({ inputRange: [0, 1], outputRange: [0, -BOX_W] });
+  const tx2 = phase2.interpolate({ inputRange: [0, 1], outputRange: [-BOX_W * 0.5, BOX_W * 0.5] });
+
+  const path1 = wavePath(BOX_W * 2, waveH, 8, 2, 0);
+  const path2 = wavePath(BOX_W * 2, waveH, 6, 2.5, 1);
+
+  if (fillH < 2) return null;
+
+  return (
+    <View style={[StyleSheet.absoluteFillObject, { justifyContent: 'flex-end' }]} pointerEvents="none">
+      {/* Solid fill */}
+      <View style={{ height: fillH, backgroundColor: 'rgba(0,180,220,0.2)' }} />
+
+      {/* Wave 1 */}
+      <Animated.View
+        style={{
+          position: 'absolute',
+          bottom: fillH - waveH + 4,
+          left: 0,
+          width: BOX_W * 2,
+          height: waveH,
+          transform: [{ translateX: tx1 }],
+        }}
+      >
+        <Svg width={BOX_W * 2} height={waveH}>
+          <Path d={path1} fill="rgba(0,180,220,0.25)" />
+        </Svg>
+      </Animated.View>
+
+      {/* Wave 2 */}
+      <Animated.View
+        style={{
+          position: 'absolute',
+          bottom: fillH - waveH + 8,
+          left: 0,
+          width: BOX_W * 2,
+          height: waveH,
+          transform: [{ translateX: tx2 }],
+        }}
+      >
+        <Svg width={BOX_W * 2} height={waveH}>
+          <Path d={path2} fill="rgba(0,220,240,0.15)" />
+        </Svg>
+      </Animated.View>
+    </View>
+  );
+}
+
+const todayISO = () => new Date().toISOString().split('T')[0];
+
+export default function HidratacionScreen() {
+  const [currentMl, setCurrentMl] = useState(0);
+  const [weekly, setWeekly] = useState(buildWeekDays());
+  const [saving, setSaving] = useState(false);
+
+  // Load today's hydration and last 7 days on mount
+  useEffect(() => {
+    (async () => {
+      const [todayLog, weekData] = await Promise.all([
+        getHydrationForDate(todayISO()),
+        getWeeklyHydration(),
+      ]);
+      if (todayLog) setCurrentMl(todayLog.total_ml);
+      if (weekData.length > 0) {
+        setWeekly((prev) =>
+          prev.map((d) => {
+            const found = weekData.find((w) => w.date === d.date);
+            return found ? { ...d, ml: found.total_ml } : d;
+          })
+        );
       }
+    })();
+  }, []);
+
+  const add = (ml: number) => {
+    setCurrentMl((prev) => {
+      const next = prev + ml;
+      if (prev < GOAL_ML && next >= GOAL_ML)
+        Alert.alert('¡Meta alcanzada!', 'Completaste tu objetivo diario.');
+      // Update today in weekly preview
+      setWeekly((w) => w.map((d) => d.today ? { ...d, ml: next } : d));
       return next;
     });
-  }, []);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    const ok = await saveHydration(currentMl, todayISO());
+    setSaving(false);
+    if (ok) Alert.alert('Guardado', `Registraste ${(currentMl / 1000).toFixed(1)}L hoy.`);
+    else Alert.alert('Error', 'No se pudo guardar. Verificá tu conexión.');
+  };
 
   const progress = Math.min(currentMl / GOAL_ML, 1);
   const liters = (currentMl / 1000).toFixed(1);
-  const goalLiters = (GOAL_ML / 1000).toFixed(1);
-  const avgMl = Math.round(WEEKLY_DATA.filter((d) => d.ml > 0).reduce((a, b) => a + b.ml, 0) / WEEKLY_DATA.filter((d) => d.ml > 0).length);
-  const maxBar = Math.max(...WEEKLY_DATA.map((d) => d.ml), GOAL_ML);
-
-  const handleSave = () => {
-    Alert.alert('Guardado', 'Tu registro de hidratación fue guardado.');
-  };
+  const avgMl = Math.round(weekly.filter((d) => d.ml > 0).reduce((a, b) => a + b.ml, 0) / Math.max(weekly.filter((d) => d.ml > 0).length, 1));
+  const maxMl = Math.max(...weekly.map((d) => d.ml), 1);
 
   return (
-    <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Title */}
-        <View style={styles.titleSection}>
-          <Text style={styles.title}>Hidratación</Text>
-          <Text style={styles.subtitle}>Control diario de agua</Text>
-        </View>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
 
-        {/* Main Display */}
-        <View style={styles.mainDisplay}>
-          <View style={styles.circleContainer}>
-            {/* Progress Ring (simplified) */}
-            <View style={styles.progressRing}>
-              <View style={[styles.progressFill, { height: `${progress * 100}%` }]} />
-              <View style={styles.progressContent}>
-                <MaterialCommunityIcons name="water" size={28} color={COLORS.water} />
-                <Text style={styles.currentValue}>{liters}</Text>
-                <View style={styles.goalRow}>
-                  <View style={styles.goalDivider} />
-                  <Text style={styles.goalValue}>{goalLiters}</Text>
-                </View>
-                <Text style={styles.unitLabel}>LITROS</Text>
-              </View>
-            </View>
-          </View>
+        <Text style={styles.title}>HIDRATACIÓN</Text>
+        <Text style={styles.subtitle}>RENDIMIENTO COGNITIVO &amp; FÍSICO</Text>
 
-          {/* Progress Bar */}
-          <View style={styles.progressBarContainer}>
-            <View style={styles.progressBarBg}>
-              <View style={[styles.progressBarFill, { width: `${progress * 100}%` }]} />
+        {/* Water box */}
+        <View style={styles.waterBox}>
+          <WaterWaves progress={progress} />
+          <View style={styles.bubble1} />
+          <View style={styles.bubble2} />
+          <View style={styles.boxContent} pointerEvents="none">
+            <View style={styles.valueRow}>
+              <Text style={styles.bigValue}>{liters}</Text>
+              <Text style={styles.goalValue}>/ 3.0</Text>
             </View>
-            <Text style={styles.progressPercent}>{Math.round(progress * 100)}%</Text>
+            <Text style={styles.litrosLabel}>LITROS DIARIOS</Text>
           </View>
         </View>
 
-        {/* Quick Add Buttons */}
-        <View style={styles.quickAddSection}>
-          <Text style={styles.sectionLabel}>AÑADIR</Text>
-          <View style={styles.quickAddRow}>
-            <TouchableOpacity style={styles.quickAddBtn} onPress={() => addWater(250)} activeOpacity={0.7}>
-              <MaterialCommunityIcons name="cup-water" size={20} color={COLORS.water} />
-              <Text style={styles.quickAddText}>+250</Text>
-              <Text style={styles.quickAddUnit}>ML</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.quickAddBtn, styles.quickAddBtnMedium]} onPress={() => addWater(500)} activeOpacity={0.7}>
-              <MaterialCommunityIcons name="bottle-soda-classic" size={20} color={COLORS.secondary} />
-              <Text style={styles.quickAddText}>+500</Text>
-              <Text style={styles.quickAddUnit}>ML</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.quickAddBtn, styles.quickAddBtnLarge]} onPress={() => addWater(1000)} activeOpacity={0.7}>
-              <MaterialCommunityIcons name="water" size={20} color={COLORS.primary} />
-              <Text style={styles.quickAddText}>+1</Text>
-              <Text style={styles.quickAddUnit}>L</Text>
-            </TouchableOpacity>
-          </View>
+        {/* Quick Add */}
+        <View style={styles.quickAdd}>
+          <TouchableOpacity style={styles.addBtn} onPress={() => add(250)} activeOpacity={0.8}>
+            <MaterialCommunityIcons name="cup-water" size={24} color={COLORS.secondary} />
+            <Text style={styles.addBtnLabel}>+250ML</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.addBtn} onPress={() => add(500)} activeOpacity={0.8}>
+            <MaterialCommunityIcons name="water" size={24} color={COLORS.secondary} />
+            <Text style={styles.addBtnLabel}>+500ML</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.addBtn, styles.addBtnPrimary]} onPress={() => add(1000)} activeOpacity={0.8}>
+            <MaterialCommunityIcons name="cup" size={24} color="#000" />
+            <Text style={[styles.addBtnLabel, { color: '#000', fontWeight: '900' }]}>+1L</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Weekly Chart */}
-        <View style={styles.weeklySection}>
-          <View style={styles.weeklySectionHeader}>
-            <Text style={styles.sectionTitle}>Esta semana</Text>
-            <Text style={styles.weeklyAvg}>Prom: {(avgMl / 1000).toFixed(1)}L</Text>
+        <View style={styles.chartCard}>
+          <View style={styles.chartHeader}>
+            <Text style={styles.chartTitle}>ÚLTIMOS 7 DÍAS</Text>
+            <View style={styles.avgBadge}>
+              <Text style={styles.avgBadgeText}>PROMEDIO: {(avgMl / 1000).toFixed(1)}L</Text>
+            </View>
           </View>
-          <View style={styles.chartContainer}>
-            {WEEKLY_DATA.map((item, index) => {
-              const barHeight = item.ml > 0 ? (item.ml / maxBar) * 140 : 4;
-              const isGoalMet = item.ml >= GOAL_ML;
-              const isToday = index === WEEKLY_DATA.length - 1;
+          <View style={styles.chartBars}>
+            {weekly.map((d) => {
+              const pct = maxMl > 0 ? (d.ml / maxMl) * 100 : 0;
               return (
-                <View key={item.day} style={styles.chartBar}>
-                  <Text style={styles.chartBarValue}>
-                    {item.ml > 0 ? `${(item.ml / 1000).toFixed(1)}` : '-'}
-                  </Text>
-                  <View style={styles.chartBarTrack}>
-                    <View
-                      style={[
-                        styles.chartBarFill,
-                        {
-                          height: barHeight,
-                          backgroundColor: isGoalMet ? COLORS.primary : COLORS.water,
-                        },
-                        isToday && { backgroundColor: COLORS.secondary },
-                      ]}
-                    />
+                <View key={d.date} style={styles.barCol}>
+                  <View style={styles.barTrack}>
+                    <View style={[styles.barFill, { height: `${pct}%` as any }, d.today && styles.barFillToday]} />
                   </View>
-                  <Text style={[styles.chartBarLabel, isToday && { color: COLORS.secondary }]}>
-                    {item.day}
-                  </Text>
+                  <Text style={[styles.barLabel, d.today && styles.barLabelToday]}>{d.day}</Text>
                 </View>
               );
             })}
           </View>
-          {/* Goal line label */}
-          <View style={styles.goalLine}>
-            <View style={styles.goalLineDash} />
-            <Text style={styles.goalLineText}>Meta: {goalLiters}L</Text>
-          </View>
         </View>
 
-        {/* Save */}
-        <View style={styles.actionSection}>
-          <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-            <Text style={styles.saveButtonText}>GUARDAR REGISTRO</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={{ height: 100 }} />
+        <View style={{ height: 110 }} />
       </ScrollView>
-    </View>
+
+      <View style={styles.footer}>
+        <TouchableOpacity style={styles.saveBtn} onPress={() => Alert.alert('Guardado', 'Tu registro fue guardado.')} activeOpacity={0.9}>
+          <Text style={styles.saveBtnText}>GUARDAR REGISTRO</Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.bg,
-  },
-  titleSection: {
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 16,
-  },
-  title: {
-    fontSize: 30,
-    fontWeight: '700',
-    color: COLORS.text,
-    letterSpacing: -0.8,
-  },
-  subtitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.textVariant,
-    letterSpacing: 0.5,
-    marginTop: 6,
-  },
-  mainDisplay: {
-    paddingHorizontal: 24,
-    marginBottom: 32,
-    alignItems: 'center',
-  },
-  circleContainer: {
-    marginBottom: 20,
-  },
-  progressRing: {
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: COLORS.surface,
-    borderWidth: 3,
-    borderColor: COLORS.borderLight,
-    overflow: 'hidden',
-    justifyContent: 'flex-end',
-  },
-  progressFill: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: `${COLORS.water}20`,
-    borderTopLeftRadius: 100,
-    borderTopRightRadius: 100,
-  },
-  progressContent: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  currentValue: {
-    fontSize: 48,
-    fontWeight: '700',
-    color: COLORS.text,
-    marginTop: 4,
-  },
-  goalRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: -4,
-  },
-  goalDivider: {
-    width: 16,
-    height: 2,
-    backgroundColor: COLORS.textVariant,
-  },
-  goalValue: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.textVariant,
-  },
-  unitLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.textVariant,
-    letterSpacing: 2,
-    marginTop: 4,
-  },
-  progressBarContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    width: '100%',
-  },
-  progressBarBg: {
-    flex: 1,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.surface,
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    borderRadius: 4,
-    backgroundColor: COLORS.water,
-  },
-  progressPercent: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.water,
-    width: 40,
-  },
-  quickAddSection: {
-    paddingHorizontal: 24,
-    marginBottom: 32,
-  },
-  sectionLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.textVariant,
-    letterSpacing: 2,
-    marginBottom: 14,
-  },
-  quickAddRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  quickAddBtn: {
-    flex: 1,
-    paddingVertical: 20,
-    backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    alignItems: 'center',
-    gap: 8,
-  },
-  quickAddBtnMedium: {},
-  quickAddBtnLarge: {},
-  quickAddText: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  quickAddUnit: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.textVariant,
-    letterSpacing: 1,
-  },
-  weeklySection: {
-    paddingHorizontal: 24,
-    marginBottom: 32,
-  },
-  weeklySectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  weeklyAvg: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.water,
-  },
-  chartContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    height: 180,
-    paddingTop: 20,
-  },
-  chartBar: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 6,
-  },
-  chartBarValue: {
-    fontSize: 9,
-    fontWeight: '600',
-    color: COLORS.textVariant,
-  },
-  chartBarTrack: {
-    width: 24,
-    height: 140,
-    borderRadius: 12,
-    backgroundColor: COLORS.surface,
-    justifyContent: 'flex-end',
-    overflow: 'hidden',
-  },
-  chartBarFill: {
-    width: '100%',
-    borderRadius: 12,
-  },
-  chartBarLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.textVariant,
-    letterSpacing: 0.5,
-  },
-  goalLine: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 12,
-  },
-  goalLineDash: {
-    flex: 1,
-    height: 1,
-    borderStyle: 'dashed',
-    borderWidth: 1,
-    borderColor: 'rgba(209,255,38,0.3)',
-  },
-  goalLineText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: COLORS.primaryDim,
-    letterSpacing: 0.5,
-  },
-  actionSection: {
-    paddingHorizontal: 24,
-    marginBottom: 24,
-  },
-  saveButton: {
-    backgroundColor: COLORS.primary,
-    paddingVertical: 18,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  saveButtonText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#000',
-    letterSpacing: 1.5,
-  },
-});
+  container: { flex: 1, backgroundColor: COLORS.bg },
+  scroll: { paddingHorizontal: 24, paddingTop: 12 },
 
-export default HidratacionScreen;
+  title: { fontSize: 52, fontWeight: '700', color: COLORS.text, letterSpacing: -1, lineHeight: 56, marginBottom: 6 },
+  subtitle: { fontSize: 11, color: COLORS.secondary, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 24, opacity: 0.85 },
+
+  waterBox: {
+    width: BOX_W, height: BOX_H, borderRadius: 20,
+    backgroundColor: COLORS.surface, overflow: 'hidden',
+    marginBottom: 24, justifyContent: 'center', alignItems: 'center',
+  },
+  boxContent: { alignItems: 'center', zIndex: 2 },
+  valueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  bigValue: { fontSize: 80, fontWeight: '900', color: COLORS.text, lineHeight: 88 },
+  goalValue: { fontSize: 28, fontWeight: '500', color: COLORS.textVariant },
+  litrosLabel: { fontSize: 12, color: COLORS.secondary, letterSpacing: 4, textTransform: 'uppercase', marginTop: 4 },
+
+  bubble1: { position: 'absolute', top: '25%', left: '22%', width: 10, height: 10, borderRadius: 5, backgroundColor: 'rgba(0,227,253,0.4)' },
+  bubble2: { position: 'absolute', top: '38%', left: '35%', width: 5, height: 5, borderRadius: 3, backgroundColor: 'rgba(0,227,253,0.6)' },
+
+  quickAdd: { flexDirection: 'row', gap: 12, marginBottom: 24 },
+  addBtn: { flex: 1, backgroundColor: COLORS.surfaceHighest, borderRadius: 14, paddingVertical: 18, alignItems: 'center', gap: 8 },
+  addBtnPrimary: { backgroundColor: COLORS.primaryContainer },
+  addBtnLabel: { fontSize: 10, fontWeight: '700', color: COLORS.textVariant, letterSpacing: 1, textTransform: 'uppercase' },
+
+  chartCard: { backgroundColor: COLORS.surfaceLow, borderRadius: 16, padding: 24, borderWidth: 1, borderColor: 'rgba(72,72,71,0.15)' },
+  chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  chartTitle: { fontSize: 16, fontWeight: '700', color: COLORS.text, letterSpacing: 0.5 },
+  avgBadge: { backgroundColor: 'rgba(0,104,117,0.3)', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
+  avgBadgeText: { fontSize: 10, color: COLORS.secondary, letterSpacing: 0.5 },
+  chartBars: { flexDirection: 'row', alignItems: 'flex-end', height: 120, gap: 8 },
+  barCol: { flex: 1, height: '100%', alignItems: 'center', gap: 6 },
+  barTrack: { flex: 1, width: '100%', backgroundColor: COLORS.surfaceHighest, borderRadius: 4, justifyContent: 'flex-end', overflow: 'hidden' },
+  barFill: { width: '100%', backgroundColor: COLORS.surfaceHighest, borderRadius: 4 },
+  barFillToday: { backgroundColor: COLORS.secondaryDim },
+  barLabel: { fontSize: 8, fontWeight: '700', color: COLORS.textVariant, letterSpacing: 0.5, textTransform: 'uppercase' },
+  barLabelToday: { color: COLORS.secondary },
+
+  footer: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 24, paddingBottom: 32, paddingTop: 12 },
+  saveBtn: { backgroundColor: COLORS.primary, borderRadius: 16, paddingVertical: 18, alignItems: 'center', shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 24, elevation: 8 },
+  saveBtnText: { fontSize: 16, fontWeight: '700', color: '#000', letterSpacing: 2, textTransform: 'uppercase' },
+});

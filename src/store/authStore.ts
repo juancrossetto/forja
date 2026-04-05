@@ -38,20 +38,27 @@ export const useAuthStore = create<AuthState>((set) => ({
         await supabase.auth.signOut();
         return;
       }
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        set({
-          user: {
-            id: session.user.id,
-            email: session.user.email ?? '',
-            name: session.user.user_metadata?.name ?? session.user.email ?? '',
-            avatar: session.user.user_metadata?.avatar_url,
-          },
-          isAuthenticated: true,
-        });
+      // refreshSession validates the token with Supabase — fails fast if invalid
+      const { data, error } = await supabase.auth.refreshSession();
+      if (error || !data.session?.user) {
+        // Token inválido o expirado — limpiar y pedir login de nuevo
+        await supabase.auth.signOut();
+        await SecureStore.deleteItemAsync(REMEMBER_ME_KEY);
+        return;
       }
+      set({
+        user: {
+          id: data.session.user.id,
+          email: data.session.user.email ?? '',
+          name: data.session.user.user_metadata?.name ?? data.session.user.email ?? '',
+          avatar: data.session.user.user_metadata?.avatar_url,
+        },
+        isAuthenticated: true,
+      });
     } catch (e) {
-      // No session
+      // Sin sesión — no hacer nada, el usuario verá el login
+      await supabase.auth.signOut().catch(() => {});
+      await SecureStore.deleteItemAsync(REMEMBER_ME_KEY).catch(() => {});
     }
   },
 

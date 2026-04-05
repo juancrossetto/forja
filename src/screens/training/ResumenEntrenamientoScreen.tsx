@@ -6,8 +6,11 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRoute, useNavigation } from '@react-navigation/native';
+import { saveWorkoutLog } from '../../services/workoutService';
 
 const colors = {
   bg: '#0e0e0e',
@@ -22,8 +25,36 @@ const colors = {
 };
 
 export const ResumenEntrenamientoScreen: React.FC = () => {
+  const route = useRoute<any>();
+  const navigation = useNavigation<any>();
+  const {
+    trainingName = 'Entrenamiento',
+    duration = 0,
+    calories = 0,
+  } = route.params ?? {};
+
   const [selectedRPE, setSelectedRPE] = useState<number>(5);
   const [comments, setComments] = useState<string>('');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = async () => {
+    if (saving || saved) return;
+    setSaving(true);
+    const ok = await saveWorkoutLog({
+      workout_name: trainingName,
+      duration_min: duration > 0 ? Math.round(duration / 60) : null,
+      rpe: selectedRPE,
+      comments: comments.trim() || null,
+    });
+    setSaving(false);
+    if (ok) {
+      setSaved(true);
+      Alert.alert('¡Guardado!', 'Tu entrenamiento fue registrado correctamente.');
+    } else {
+      Alert.alert('Error', 'No se pudo guardar. Verificá tu conexión.');
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -51,7 +82,7 @@ export const ResumenEntrenamientoScreen: React.FC = () => {
               <View>
                 <Text style={styles.metricLabel}>Duración Total</Text>
                 <Text style={styles.metricValueLarge}>
-                  54<Text style={styles.metricUnit}>min</Text>
+                  {duration > 0 ? Math.round(duration / 60) : 54}<Text style={styles.metricUnit}>min</Text>
                 </Text>
               </View>
               <Text style={styles.metricIcon}>⏱</Text>
@@ -156,9 +187,16 @@ export const ResumenEntrenamientoScreen: React.FC = () => {
 
         {/* Action Buttons */}
         <View style={styles.buttonsSection}>
-          <TouchableOpacity style={styles.primaryButton} activeOpacity={0.85}>
-            <Text style={styles.primaryButtonText}>GUARDAR ENTRENAMIENTO</Text>
-            <Text style={styles.buttonIcon}>💾</Text>
+          <TouchableOpacity
+            style={[styles.primaryButton, (saving || saved) && { opacity: 0.7 }]}
+            activeOpacity={0.85}
+            onPress={handleSave}
+            disabled={saving || saved}
+          >
+            <Text style={styles.primaryButtonText}>
+              {saving ? 'GUARDANDO...' : saved ? 'GUARDADO ✓' : 'GUARDAR ENTRENAMIENTO'}
+            </Text>
+            {!saving && <Text style={styles.buttonIcon}>💾</Text>}
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.secondaryButton} activeOpacity={0.85}>
