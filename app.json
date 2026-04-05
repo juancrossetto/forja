@@ -29,7 +29,13 @@
     },
     "plugins": [
       "expo-font",
-      "expo-image-picker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Método R3SET necesita acceso a tus fotos para cargar imágenes de progreso.",
+          "cameraPermission": "Método R3SET necesita acceso a tu cámara para tomar fotos de progreso."
+        }
+      ],
       "expo-camera",
       "expo-web-browser",
       "expo-apple-authentication"

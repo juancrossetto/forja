@@ -41,6 +41,11 @@ export const HomeStack: React.FC = () => {
           headerTransparent: true,
         }}
       />
+      <Stack.Screen
+        name="CargarFotos"
+        component={CargarFotosScreen}
+        options={{ presentation: 'modal', headerShown: false }}
+      />
       <Stack.Group
         screenOptions={{
           presentation: 'modal',
@@ -49,11 +54,6 @@ export const HomeStack: React.FC = () => {
           headerTintColor: '#D1FF26',
         }}
       >
-        <Stack.Screen
-          name="CargarFotos"
-          component={CargarFotosScreen}
-          options={{ title: 'Cargar Fotos' }}
-        />
         <Stack.Screen
           name="PesoYMedidas"
           component={PesoYMedidasScreen}

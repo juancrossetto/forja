@@ -1,215 +1,274 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   Image,
-  Dimensions,
   Alert,
   ActivityIndicator,
+  PanResponder,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-
-const { width } = Dimensions.get('window');
+import { useNavigation } from '@react-navigation/native';
+import { uploadProgressPhoto, type PhotoPosition } from '../../services/photosService';
 
 const COLORS = {
   bg: '#0e0e0e',
   surface: '#1a1a1a',
-  surfaceHigh: '#20201f',
   surfaceHighest: '#262626',
-  surfaceContainer: '#131313',
   primary: '#D1FF26',
   primaryDim: '#c1ed00',
-  secondary: '#00e3fd',
-  tertiary: '#ff734a',
   text: '#ffffff',
   textVariant: '#adaaaa',
-  borderLight: 'rgba(255,255,255,0.05)',
+  outline: '#767575',
 };
 
-interface PhotoSlot {
-  id: string;
-  position: 'frente' | 'perfil' | 'espalda';
-  label: string;
-  icon: string;
-  image: string | null;
-}
-
-const INITIAL_SLOTS: PhotoSlot[] = [
-  { id: '1', position: 'frente', label: 'Frente', icon: 'account', image: null },
-  { id: '2', position: 'perfil', label: 'Perfil', icon: 'account-switch', image: null },
-  { id: '3', position: 'espalda', label: 'Espalda', icon: 'account-multiple', image: null },
+const STEPS = [
+  {
+    id: 'frente' as PhotoPosition,
+    label: 'FRENTE',
+    title: 'VISTA FRONTAL',
+    icon: 'account' as const,
+    instructions:
+      'BUENA ILUMINACIÓN NATURAL Y\nFONDO DE PARED LISA.\nHOMBRES: SOLO SHORT.\nMUJERES: SHORT Y TOP.',
+  },
+  {
+    id: 'perfil' as PhotoPosition,
+    label: 'PERFIL',
+    title: 'VISTA DE PERFIL',
+    icon: 'account-switch' as const,
+    instructions:
+      'PÁRATE DE LADO CON LOS BRAZOS\nEXTENDIDOS HACIA ADELANTE.\nMISMA ILUMINACIÓN Y FONDO LISO.',
+  },
+  {
+    id: 'espalda' as PhotoPosition,
+    label: 'ESPALDA',
+    title: 'VISTA DE ESPALDA',
+    icon: 'account-multiple' as const,
+    instructions:
+      'DA LA ESPALDA A LA CÁMARA,\nPIES AL ANCHO DE HOMBROS.\nHOMBRES: SOLO SHORT.\nMUJERES: SHORT Y TOP.',
+  },
 ];
 
+type Photos = Record<PhotoPosition, string | null>;
+
 const CargarFotosScreen: React.FC = () => {
-  const [photos, setPhotos] = useState<PhotoSlot[]>(INITIAL_SLOTS);
-  const [week] = useState(12);
-  const [loading, setLoading] = useState<string | null>(null);
+  const navigation = useNavigation();
+  const [step, setStep] = useState(0);
+  const [photos, setPhotos] = useState<Photos>({ frente: null, perfil: null, espalda: null });
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const requestPermission = async (type: 'camera' | 'gallery') => {
-    if (type === 'camera') {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permisos necesarios', 'Necesitamos acceso a tu cámara para tomar fotos.');
-        return false;
-      }
-    } else {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permisos necesarios', 'Necesitamos acceso a tu galería para seleccionar fotos.');
-        return false;
-      }
-    }
-    return true;
-  };
+  const current = STEPS[step];
+  const currentPhoto = photos[current.id];
+  const hasAnyPhoto = Object.values(photos).some(Boolean);
 
-  const handleTakePhoto = async (slotId: string) => {
-    const hasPermission = await requestPermission('camera');
-    if (!hasPermission) return;
+  // Ref para evitar stale closure en PanResponder
+  const stepRef = useRef(step);
+  useEffect(() => { stepRef.current = step; }, [step]);
 
-    setLoading(slotId);
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, { dx, dy }) =>
+        Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10,
+      onPanResponderRelease: (_, { dx }) => {
+        if (dx < -50 && stepRef.current < STEPS.length - 1) {
+          setStep(stepRef.current + 1);
+        } else if (dx > 50 && stepRef.current > 0) {
+          setStep(stepRef.current - 1);
+        }
+      },
+    })
+  ).current;
+
+  const handleTakePhoto = async () => {
+    setLoading(true);
     try {
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [3, 4],
-        quality: 0.8,
+        quality: 0.5,
       });
-
       if (!result.canceled && result.assets[0]) {
-        setPhotos((prev) =>
-          prev.map((p) => (p.id === slotId ? { ...p, image: result.assets[0].uri } : p))
-        );
+        setPhotos((prev) => ({ ...prev, [current.id]: result.assets[0].uri }));
       }
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'No se pudo tomar la foto.');
     } finally {
-      setLoading(null);
+      setLoading(false);
     }
   };
 
-  const handleSelectFromGallery = async (slotId: string) => {
-    const hasPermission = await requestPermission('gallery');
-    if (!hasPermission) return;
-
-    setLoading(slotId);
+  const handleSelectFromGallery = async () => {
+    setLoading(true);
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [3, 4],
-        quality: 0.8,
+        quality: 0.5,
       });
-
       if (!result.canceled && result.assets[0]) {
-        setPhotos((prev) =>
-          prev.map((p) => (p.id === slotId ? { ...p, image: result.assets[0].uri } : p))
-        );
+        setPhotos((prev) => ({ ...prev, [current.id]: result.assets[0].uri }));
       }
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'No se pudo seleccionar la foto.');
     } finally {
-      setLoading(null);
+      setLoading(false);
     }
   };
 
-  const handleRemovePhoto = (slotId: string) => {
-    setPhotos((prev) =>
-      prev.map((p) => (p.id === slotId ? { ...p, image: null } : p))
-    );
+  const handleSave = async () => {
+    const entries = Object.entries(photos).filter(([, uri]) => uri !== null) as [PhotoPosition, string][];
+    if (entries.length === 0) return;
+    setSaving(true);
+    try {
+      await Promise.all(
+        entries.map(([position, uri]) => uploadProgressPhoto(position, uri))
+      );
+      Alert.alert('¡Listo!', 'Tus fotos de progreso se guardaron correctamente.', [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
+    } catch (err: any) {
+      Alert.alert('Error al guardar', err?.message ?? 'Intentá de nuevo.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const hasPhotos = photos.some((p) => p.image !== null);
-
   return (
-    <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Title Section */}
-        <View style={styles.titleSection}>
-          <Text style={styles.titleMain}>Cargar Fotos</Text>
-          <Text style={[styles.titleMain, { color: COLORS.primaryDim }]}>de Progreso</Text>
-          <Text style={styles.titleSubtitle}>Semana {week} · Tracking Visual</Text>
-        </View>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
 
-        {/* Photo Grid */}
-        <View style={styles.gridSection}>
-          <View style={styles.photoGrid}>
-            {photos.map((slot) => (
-              <View key={slot.id} style={styles.photoSlot}>
-                <View style={styles.photoFrame}>
-                  {loading === slot.id ? (
-                    <View style={styles.photoPlaceholder}>
-                      <ActivityIndicator size="large" color={COLORS.primary} />
-                    </View>
-                  ) : slot.image ? (
-                    <View style={{ flex: 1 }}>
-                      <Image source={{ uri: slot.image }} style={styles.photoImage} />
-                      <TouchableOpacity
-                        style={styles.removeButton}
-                        onPress={() => handleRemovePhoto(slot.id)}
-                      >
-                        <MaterialCommunityIcons name="close-circle" size={24} color={COLORS.tertiary} />
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <View style={styles.photoPlaceholder}>
-                      <MaterialCommunityIcons name={slot.icon} size={32} color={COLORS.textVariant} />
-                      <Text style={styles.photoPlaceholderLabel}>{slot.label}</Text>
-                    </View>
-                  )}
-                </View>
-                <View style={styles.photoActions}>
-                  <TouchableOpacity
-                    style={styles.photoButton}
-                    onPress={() => handleTakePhoto(slot.id)}
-                    disabled={loading !== null}
-                  >
-                    <MaterialCommunityIcons name="camera" size={14} color={COLORS.text} />
-                    <Text style={styles.photoButtonText}>Cámara</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.photoButton, styles.photoButtonSecondary]}
-                    onPress={() => handleSelectFromGallery(slot.id)}
-                    disabled={loading !== null}
-                  >
-                    <MaterialCommunityIcons name="image" size={14} color={COLORS.primaryDim} />
-                    <Text style={styles.photoButtonSecondaryText}>Galería</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
-          </View>
-        </View>
+      {/* Back button */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
+          <MaterialCommunityIcons name="arrow-left" size={24} color={COLORS.primary} />
+        </TouchableOpacity>
+      </View>
 
-        {/* Tips */}
-        <View style={styles.tipsSection}>
-          <View style={styles.tipCard}>
-            <MaterialCommunityIcons name="lightbulb-outline" size={16} color={COLORS.primary} />
-            <Text style={styles.tipText}>
-              Usa la misma iluminación y posición cada semana para mejores comparaciones.
+      {/* Title */}
+      <View style={styles.titleSection}>
+        <Text style={styles.titleLine1}>CARGAR FOTOS</Text>
+        <Text style={styles.titleLine2}>DE PROGRESO</Text>
+        <Text style={styles.subtitle}>TRACKING MENTAL Y FÍSICO</Text>
+      </View>
+
+      {/* Step Tabs */}
+      <View style={styles.tabs}>
+        {STEPS.map((s, i) => (
+          <TouchableOpacity key={s.id} style={styles.tab} onPress={() => setStep(i)}>
+            <Text style={[styles.tabLabel, i === step && styles.tabLabelActive]}>
+              {s.label}
             </Text>
-          </View>
-        </View>
-
-        {/* Save Button */}
-        <View style={styles.actionSection}>
-          <TouchableOpacity
-            style={[styles.saveButton, !hasPhotos && styles.saveButtonDisabled]}
-            disabled={!hasPhotos}
-          >
-            <Text style={[styles.saveButtonText, !hasPhotos && styles.saveButtonTextDisabled]}>
-              Guardar Registros
-            </Text>
+            <View style={[styles.tabUnderline, i === step && styles.tabUnderlineActive]} />
           </TouchableOpacity>
-          <Text style={styles.encryptionNote}>Tus datos están encriptados y seguros</Text>
+        ))}
+      </View>
+
+      {/* Photo Area — flex:1, swipeable left/right */}
+      <View style={styles.photoArea} {...panResponder.panHandlers}>
+        {loading ? (
+          <View style={styles.placeholderContent}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+          </View>
+        ) : currentPhoto ? (
+          <Image
+            source={{ uri: currentPhoto }}
+            style={StyleSheet.absoluteFillObject}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={styles.placeholderContent}>
+            <View style={styles.personIconBg}>
+              <MaterialCommunityIcons name={current.icon} size={36} color={COLORS.primary} />
+            </View>
+            <Text style={styles.positionTitle}>{current.title}</Text>
+            <Text style={styles.instructions}>{current.instructions}</Text>
+          </View>
+        )}
+
+        <TouchableOpacity style={styles.infoBtn}>
+          <MaterialCommunityIcons name="information-outline" size={18} color={COLORS.primary} />
+        </TouchableOpacity>
+
+        <View style={styles.photoButtons}>
+          <TouchableOpacity style={styles.btnCamera} onPress={handleTakePhoto} disabled={loading}>
+            <MaterialCommunityIcons name="camera" size={14} color="#000" />
+            <Text style={styles.btnCameraText}>TOMAR FOTO</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.btnGallery} onPress={handleSelectFromGallery} disabled={loading}>
+            <Text style={styles.btnGalleryText}>GALERÍA</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Step Navigation */}
+      <View style={styles.stepNav}>
+        <TouchableOpacity
+          style={styles.stepNavSide}
+          onPress={() => step > 0 && setStep(step - 1)}
+          disabled={step === 0}
+        >
+          <MaterialCommunityIcons
+            name="arrow-left"
+            size={16}
+            color={step === 0 ? COLORS.outline : COLORS.text}
+          />
+          <Text style={[styles.stepNavLabel, step === 0 && styles.stepNavLabelDisabled]}>
+            ANTERIOR
+          </Text>
+        </TouchableOpacity>
+
+        <View style={styles.dots}>
+          {STEPS.map((_, i) => (
+            <View key={i} style={[styles.dot, i === step && styles.dotActive]} />
+          ))}
         </View>
 
-        <View style={{ height: 100 }} />
-      </ScrollView>
-    </View>
+        <TouchableOpacity
+          style={styles.stepNavSide}
+          onPress={() => step < STEPS.length - 1 && setStep(step + 1)}
+          disabled={step === STEPS.length - 1}
+        >
+          <Text
+            style={[
+              styles.stepNavLabel,
+              { color: step === STEPS.length - 1 ? COLORS.outline : COLORS.primary },
+            ]}
+          >
+            SIGUIENTE
+          </Text>
+          <MaterialCommunityIcons
+            name="arrow-right"
+            size={16}
+            color={step === STEPS.length - 1 ? COLORS.outline : COLORS.primary}
+          />
+        </TouchableOpacity>
+      </View>
+
+      {/* Save */}
+      <View style={styles.actionSection}>
+        <TouchableOpacity
+          style={[styles.saveBtn, (!hasAnyPhoto || saving) && styles.saveBtnDisabled]}
+          disabled={!hasAnyPhoto || saving}
+          onPress={handleSave}
+        >
+          {saving ? (
+            <ActivityIndicator color="#000" />
+          ) : (
+            <Text style={[styles.saveBtnText, !hasAnyPhoto && styles.saveBtnTextDisabled]}>
+              GUARDAR REGISTROS
+            </Text>
+          )}
+        </TouchableOpacity>
+        <Text style={styles.encryptionNote}>TUS DATOS ESTÁN ENCRIPTADOS Y SEGUROS</Text>
+      </View>
+
+    </SafeAreaView>
   );
 };
 
@@ -218,148 +277,225 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.bg,
   },
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
+  headerBtn: {
+    padding: 4,
+    alignSelf: 'flex-start',
+  },
   titleSection: {
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 24,
+    paddingTop: 8,
+    paddingBottom: 12,
   },
-  titleMain: {
-    fontSize: 30,
-    fontWeight: '700',
+  titleLine1: {
+    fontFamily: 'BebasNeue_400Regular',
+    fontSize: 48,
     color: COLORS.text,
-    letterSpacing: -0.8,
-    lineHeight: 34,
+    letterSpacing: 2,
+    lineHeight: 50,
   },
-  titleSubtitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.textVariant,
-    letterSpacing: 0.5,
-    marginTop: 12,
-  },
-  gridSection: {
-    paddingHorizontal: 20,
-    marginBottom: 24,
-  },
-  photoGrid: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  photoSlot: {
-    flex: 1,
-  },
-  photoFrame: {
-    aspectRatio: 3 / 4,
-    backgroundColor: COLORS.surfaceHigh,
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-  },
-  photoPlaceholder: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-  },
-  photoPlaceholderLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.textVariant,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-  },
-  photoImage: {
-    width: '100%',
-    height: '100%',
-  },
-  removeButton: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 12,
-  },
-  photoActions: {
-    gap: 6,
-  },
-  photoButton: {
-    flexDirection: 'row',
-    gap: 6,
-    paddingVertical: 10,
-    backgroundColor: COLORS.surfaceHighest,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  photoButtonText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.text,
-    letterSpacing: 0.3,
-  },
-  photoButtonSecondary: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  photoButtonSecondaryText: {
-    fontSize: 10,
-    fontWeight: '700',
+  titleLine2: {
+    fontFamily: 'BebasNeue_400Regular',
+    fontSize: 48,
     color: COLORS.primaryDim,
-    letterSpacing: 0.3,
+    letterSpacing: 2,
+    lineHeight: 50,
   },
-  tipsSection: {
-    paddingHorizontal: 20,
-    marginBottom: 24,
-  },
-  tipCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: COLORS.surfaceContainer,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-  },
-  tipText: {
-    flex: 1,
-    fontSize: 12,
+  subtitle: {
+    fontFamily: 'Lexend',
+    marginTop: 8,
+    fontSize: 10,
     color: COLORS.textVariant,
-    lineHeight: 18,
+    letterSpacing: 2,
   },
-  actionSection: {
-    paddingHorizontal: 20,
-    gap: 12,
+  tabs: {
+    flexDirection: 'row',
+    marginHorizontal: 20,
+    marginBottom: 10,
   },
-  saveButton: {
+  tab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingBottom: 8,
+  },
+  tabLabel: {
+    fontFamily: 'Lexend',
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.textVariant,
+    letterSpacing: 1.5,
+  },
+  tabLabelActive: {
+    color: COLORS.text,
+  },
+  tabUnderline: {
+    marginTop: 6,
+    height: 2,
+    width: '100%',
+    backgroundColor: 'transparent',
+  },
+  tabUnderlineActive: {
     backgroundColor: COLORS.primary,
-    paddingVertical: 16,
+  },
+  photoArea: {
+    flex: 1,
+    marginHorizontal: 20,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(193, 237, 0, 0.35)',
     borderRadius: 12,
+    backgroundColor: COLORS.surface,
+    overflow: 'hidden',
+    position: 'relative',
+    marginBottom: 12,
+  },
+  placeholderContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingBottom: 70,
+  },
+  personIconBg: {
+    width: 72,
+    height: 72,
+    borderRadius: 10,
+    backgroundColor: 'rgba(193, 237, 0, 0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  positionTitle: {
+    fontFamily: 'BebasNeue_400Regular',
+    fontSize: 22,
+    color: COLORS.text,
+    letterSpacing: 2,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  instructions: {
+    fontFamily: 'Lexend',
+    fontSize: 9,
+    fontWeight: '400',
+    color: COLORS.textVariant,
+    letterSpacing: 1.2,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  infoBtn: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    padding: 4,
+  },
+  photoButtons: {
+    position: 'absolute',
+    bottom: 12,
+    left: 12,
+    right: 12,
+    flexDirection: 'row',
+    gap: 10,
+  },
+  btnCamera: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 6,
+    paddingVertical: 12,
+    backgroundColor: COLORS.primary,
+    borderRadius: 6,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  saveButtonDisabled: {
-    backgroundColor: COLORS.surfaceHighest,
-  },
-  saveButtonText: {
-    fontSize: 16,
+  btnCameraText: {
+    fontFamily: 'Lexend',
+    fontSize: 9,
     fontWeight: '700',
     color: '#000',
-    letterSpacing: -0.3,
+    letterSpacing: 1.5,
   },
-  saveButtonTextDisabled: {
+  btnGallery: {
+    flex: 1,
+    paddingVertical: 12,
+    backgroundColor: COLORS.surfaceHighest,
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  btnGalleryText: {
+    fontFamily: 'Lexend',
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.text,
+    letterSpacing: 1.5,
+  },
+  stepNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 20,
+    marginBottom: 12,
+  },
+  stepNavSide: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  stepNavLabel: {
+    fontFamily: 'Lexend',
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.text,
+    letterSpacing: 1.5,
+  },
+  stepNavLabelDisabled: {
+    color: COLORS.outline,
+  },
+  dots: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.surfaceHighest,
+  },
+  dotActive: {
+    backgroundColor: COLORS.primary,
+  },
+  actionSection: {
+    marginHorizontal: 20,
+    gap: 10,
+  },
+  saveBtn: {
+    height: 52,
+    backgroundColor: COLORS.primary,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  saveBtnDisabled: {
+    backgroundColor: COLORS.surfaceHighest,
+  },
+  saveBtnText: {
+    fontFamily: 'BebasNeue_400Regular',
+    fontSize: 20,
+    color: '#000',
+    letterSpacing: 2,
+  },
+  saveBtnTextDisabled: {
     color: COLORS.textVariant,
   },
   encryptionNote: {
+    fontFamily: 'Lexend',
     textAlign: 'center',
-    fontSize: 10,
-    fontWeight: '500',
-    color: COLORS.textVariant,
-    letterSpacing: 0.3,
+    fontSize: 9,
+    color: COLORS.outline,
+    letterSpacing: 1.5,
   },
 });
 

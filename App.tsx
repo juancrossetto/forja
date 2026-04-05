@@ -1,7 +1,8 @@
 import 'react-native-gesture-handler';
 import React from 'react';
-import { StatusBar } from 'react-native';
+import { StatusBar, View, ActivityIndicator } from 'react-native';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
+import { useFonts, BebasNeue_400Regular } from '@expo-google-fonts/bebas-neue';
 import RootNavigator from './src/navigation/RootNavigator';
 
 const DarkTheme = {
@@ -19,6 +20,16 @@ const DarkTheme = {
 };
 
 export default function App() {
+  const [fontsLoaded] = useFonts({ BebasNeue_400Regular });
+
+  if (!fontsLoaded) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#0e0e0e', justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator color="#D1FF26" />
+      </View>
+    );
+  }
+
   return (
     <>
       <StatusBar barStyle="light-content" backgroundColor="#0e0e0e" />
