@@ -7,8 +7,11 @@ import {
   TouchableOpacity,
   Image,
   Dimensions,
-  FlatList,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
 
@@ -21,10 +24,10 @@ const COLORS = {
   primary: '#D1FF26',
   primaryDim: '#c1ed00',
   secondary: '#00e3fd',
-  secondaryFixed: '#26e6ff',
   tertiary: '#ff734a',
   text: '#ffffff',
   textVariant: '#adaaaa',
+  borderLight: 'rgba(255,255,255,0.05)',
 };
 
 interface PhotoSlot {
@@ -35,63 +38,91 @@ interface PhotoSlot {
   image: string | null;
 }
 
-const PhotoSlots: PhotoSlot[] = [
-  { id: '1', position: 'frente', label: 'Frente', icon: '👤', image: null },
-  { id: '2', position: 'perfil', label: 'Perfil', icon: '🔄', image: null },
-  { id: '3', position: 'espalda', label: 'Espalda', icon: '👥', image: null },
+const INITIAL_SLOTS: PhotoSlot[] = [
+  { id: '1', position: 'frente', label: 'Frente', icon: 'account', image: null },
+  { id: '2', position: 'perfil', label: 'Perfil', icon: 'account-switch', image: null },
+  { id: '3', position: 'espalda', label: 'Espalda', icon: 'account-multiple', image: null },
 ];
 
 const CargarFotosScreen: React.FC = () => {
-  const [photos, setPhotos] = useState<PhotoSlot[]>(PhotoSlots);
-  const [week, setWeek] = useState(12);
+  const [photos, setPhotos] = useState<PhotoSlot[]>(INITIAL_SLOTS);
+  const [week] = useState(12);
+  const [loading, setLoading] = useState<string | null>(null);
 
-  const handleTakePhoto = (slotId: string) => {
-    // Camera logic would go here
-    console.log('Take photo:', slotId);
+  const requestPermission = async (type: 'camera' | 'gallery') => {
+    if (type === 'camera') {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permisos necesarios', 'Necesitamos acceso a tu cámara para tomar fotos.');
+        return false;
+      }
+    } else {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permisos necesarios', 'Necesitamos acceso a tu galería para seleccionar fotos.');
+        return false;
+      }
+    }
+    return true;
   };
 
-  const handleSelectFromGallery = (slotId: string) => {
-    // Gallery picker logic would go here
-    console.log('Select from gallery:', slotId);
+  const handleTakePhoto = async (slotId: string) => {
+    const hasPermission = await requestPermission('camera');
+    if (!hasPermission) return;
+
+    setLoading(slotId);
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [3, 4],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setPhotos((prev) =>
+          prev.map((p) => (p.id === slotId ? { ...p, image: result.assets[0].uri } : p))
+        );
+      }
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo tomar la foto.');
+    } finally {
+      setLoading(null);
+    }
   };
 
-  const renderPhotoGrid = () => {
-    return (
-      <View style={styles.photoGrid}>
-        {photos.map((slot) => (
-          <View key={slot.id} style={styles.photoSlot}>
-            <View style={styles.photoFrame}>
-              {slot.image ? (
-                <Image
-                  source={{ uri: slot.image }}
-                  style={styles.photoImage}
-                />
-              ) : (
-                <View style={styles.photoPlaceholder}>
-                  <Text style={styles.photoPlaceholderIcon}>{slot.icon}</Text>
-                  <Text style={styles.photoPlaceholderLabel}>{slot.label}</Text>
-                </View>
-              )}
-            </View>
-            <View style={styles.photoActions}>
-              <TouchableOpacity
-                style={styles.photoButton}
-                onPress={() => handleTakePhoto(slot.id)}
-              >
-                <Text style={styles.photoButtonText}>Tomar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.photoButton, styles.photoButtonSecondary]}
-                onPress={() => handleSelectFromGallery(slot.id)}
-              >
-                <Text style={styles.photoButtonSecondaryText}>Galería</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ))}
-      </View>
+  const handleSelectFromGallery = async (slotId: string) => {
+    const hasPermission = await requestPermission('gallery');
+    if (!hasPermission) return;
+
+    setLoading(slotId);
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [3, 4],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setPhotos((prev) =>
+          prev.map((p) => (p.id === slotId ? { ...p, image: result.assets[0].uri } : p))
+        );
+      }
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo seleccionar la foto.');
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handleRemovePhoto = (slotId: string) => {
+    setPhotos((prev) =>
+      prev.map((p) => (p.id === slotId ? { ...p, image: null } : p))
     );
   };
+
+  const hasPhotos = photos.some((p) => p.image !== null);
 
   return (
     <View style={styles.container}>
@@ -99,77 +130,85 @@ const CargarFotosScreen: React.FC = () => {
         {/* Title Section */}
         <View style={styles.titleSection}>
           <Text style={styles.titleMain}>Cargar Fotos</Text>
-          <Text style={[styles.titleMain, { color: COLORS.primaryDim }]}>
-            de Progreso
-          </Text>
-          <Text style={styles.titleSubtitle}>Tracking Mental y Físico</Text>
-        </View>
-
-        {/* Before/After Comparison */}
-        <View style={styles.comparisonSection}>
-          <View style={styles.comparisonHeader}>
-            <Text style={styles.comparisonLabel}>Vista Comparativa</Text>
-            <View style={styles.weekBadge}>
-              <Text style={styles.weekBadgeText}>Semana {week}</Text>
-            </View>
-          </View>
-          <View style={styles.comparisonContainer}>
-            {/* Before Image */}
-            <View style={styles.comparisonImage}>
-              <Image
-                source={{ uri: 'https://via.placeholder.com/150x200' }}
-                style={styles.comparisonImageContent}
-              />
-              <View style={styles.comparisonLabel}>
-                <Text style={styles.comparisonLabelText}>Inicio</Text>
-              </View>
-            </View>
-
-            {/* Comparison Slider */}
-            <View style={styles.comparisonSlider}>
-              <View style={styles.sliderHandle} />
-            </View>
-
-            {/* After Placeholder */}
-            <View style={styles.comparisonImage}>
-              <View style={styles.comparisonImagePlaceholder}>
-                <Text style={styles.placeholderIcon}>📷</Text>
-                <Text style={styles.placeholderText}>Subir Ahora</Text>
-              </View>
-              <View style={[styles.comparisonLabel, styles.comparisonLabelCurrent]}>
-                <Text style={styles.comparisonLabelTextCurrent}>Hoy</Text>
-              </View>
-            </View>
-          </View>
+          <Text style={[styles.titleMain, { color: COLORS.primaryDim }]}>de Progreso</Text>
+          <Text style={styles.titleSubtitle}>Semana {week} · Tracking Visual</Text>
         </View>
 
         {/* Photo Grid */}
         <View style={styles.gridSection}>
-          {renderPhotoGrid()}
+          <View style={styles.photoGrid}>
+            {photos.map((slot) => (
+              <View key={slot.id} style={styles.photoSlot}>
+                <View style={styles.photoFrame}>
+                  {loading === slot.id ? (
+                    <View style={styles.photoPlaceholder}>
+                      <ActivityIndicator size="large" color={COLORS.primary} />
+                    </View>
+                  ) : slot.image ? (
+                    <View style={{ flex: 1 }}>
+                      <Image source={{ uri: slot.image }} style={styles.photoImage} />
+                      <TouchableOpacity
+                        style={styles.removeButton}
+                        onPress={() => handleRemovePhoto(slot.id)}
+                      >
+                        <MaterialCommunityIcons name="close-circle" size={24} color={COLORS.tertiary} />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={styles.photoPlaceholder}>
+                      <MaterialCommunityIcons name={slot.icon} size={32} color={COLORS.textVariant} />
+                      <Text style={styles.photoPlaceholderLabel}>{slot.label}</Text>
+                    </View>
+                  )}
+                </View>
+                <View style={styles.photoActions}>
+                  <TouchableOpacity
+                    style={styles.photoButton}
+                    onPress={() => handleTakePhoto(slot.id)}
+                    disabled={loading !== null}
+                  >
+                    <MaterialCommunityIcons name="camera" size={14} color={COLORS.text} />
+                    <Text style={styles.photoButtonText}>Cámara</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.photoButton, styles.photoButtonSecondary]}
+                    onPress={() => handleSelectFromGallery(slot.id)}
+                    disabled={loading !== null}
+                  >
+                    <MaterialCommunityIcons name="image" size={14} color={COLORS.primaryDim} />
+                    <Text style={styles.photoButtonSecondaryText}>Galería</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Tips */}
+        <View style={styles.tipsSection}>
+          <View style={styles.tipCard}>
+            <MaterialCommunityIcons name="lightbulb-outline" size={16} color={COLORS.primary} />
+            <Text style={styles.tipText}>
+              Usa la misma iluminación y posición cada semana para mejores comparaciones.
+            </Text>
+          </View>
         </View>
 
         {/* Save Button */}
         <View style={styles.actionSection}>
-          <TouchableOpacity style={styles.saveButton}>
-            <Text style={styles.saveButtonText}>Guardar Registros</Text>
+          <TouchableOpacity
+            style={[styles.saveButton, !hasPhotos && styles.saveButtonDisabled]}
+            disabled={!hasPhotos}
+          >
+            <Text style={[styles.saveButtonText, !hasPhotos && styles.saveButtonTextDisabled]}>
+              Guardar Registros
+            </Text>
           </TouchableOpacity>
-          <Text style={styles.encryptionNote}>
-            Tus datos están encriptados y seguros
-          </Text>
+          <Text style={styles.encryptionNote}>Tus datos están encriptados y seguros</Text>
         </View>
 
-        <View style={styles.bottomSpacer} />
+        <View style={{ height: 100 }} />
       </ScrollView>
-
-      {/* Floating Buttons */}
-      <View style={styles.floatingButtonsContainer}>
-        <TouchableOpacity style={styles.floatingButtonChat}>
-          <Text style={styles.floatingButtonIcon}>💬</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.floatingButtonAdd}>
-          <Text style={styles.floatingButtonAddIcon}>➕</Text>
-        </TouchableOpacity>
-      </View>
     </View>
   );
 };
@@ -180,16 +219,16 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bg,
   },
   titleSection: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 16,
+    paddingBottom: 24,
   },
   titleMain: {
-    fontSize: 32,
+    fontSize: 30,
     fontWeight: '700',
     color: COLORS.text,
     letterSpacing: -0.8,
-    lineHeight: 36,
+    lineHeight: 34,
   },
   titleSubtitle: {
     fontSize: 12,
@@ -198,121 +237,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginTop: 12,
   },
-  comparisonSection: {
-    marginHorizontal: 16,
-    marginBottom: 24,
-    backgroundColor: COLORS.surfaceContainer,
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: `${COLORS.text}08`,
-  },
-  comparisonHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  comparisonLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: COLORS.textVariant,
-    letterSpacing: 0.3,
-  },
-  weekBadge: {
-    backgroundColor: `${COLORS.primary}20`,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  weekBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.primaryDim,
-    letterSpacing: 0.5,
-  },
-  comparisonContainer: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'stretch',
-    height: 250,
-    position: 'relative',
-  },
-  comparisonImage: {
-    flex: 1,
-    borderRadius: 8,
-    overflow: 'hidden',
-    backgroundColor: COLORS.surfaceHigh,
-    position: 'relative',
-  },
-  comparisonImageContent: {
-    width: '100%',
-    height: '100%',
-    opacity: 0.6,
-  },
-  comparisonImagePlaceholder: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: COLORS.surfaceHighest,
-    borderWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: `${COLORS.primaryDim}80`,
-  },
-  placeholderIcon: {
-    fontSize: 32,
-    marginBottom: 8,
-  },
-  placeholderText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.primaryDim,
-    letterSpacing: 0.3,
-  },
-  comparisonLabel: {
-    position: 'absolute',
-    bottom: 8,
-    left: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  comparisonLabelText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.text,
-    letterSpacing: 0.3,
-  },
-  comparisonLabelCurrent: {
-    backgroundColor: COLORS.primary,
-  },
-  comparisonLabelTextCurrent: {
-    color: '#000000',
-  },
-  comparisonSlider: {
-    position: 'absolute',
-    left: '50%',
-    top: 0,
-    bottom: 0,
-    width: 2,
-    backgroundColor: `${COLORS.primaryDim}80`,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sliderHandle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: COLORS.primary,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    elevation: 4,
-  },
   gridSection: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     marginBottom: 24,
   },
   photoGrid: {
@@ -323,13 +249,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   photoFrame: {
-    aspectRatio: 2 / 3,
+    aspectRatio: 3 / 4,
     backgroundColor: COLORS.surfaceHigh,
-    borderRadius: 8,
+    borderRadius: 12,
     overflow: 'hidden',
-    marginBottom: 8,
+    marginBottom: 10,
     borderWidth: 1,
-    borderColor: `${COLORS.text}0F`,
+    borderColor: COLORS.borderLight,
   },
   photoPlaceholder: {
     flex: 1,
@@ -337,67 +263,96 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  photoPlaceholderIcon: {
-    fontSize: 28,
-  },
   photoPlaceholderLabel: {
-    fontSize: 9,
-    fontWeight: '600',
+    fontSize: 10,
+    fontWeight: '700',
     color: COLORS.textVariant,
-    letterSpacing: 0.3,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   photoImage: {
     width: '100%',
     height: '100%',
   },
+  removeButton: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 12,
+  },
   photoActions: {
     gap: 6,
   },
   photoButton: {
+    flexDirection: 'row',
+    gap: 6,
     paddingVertical: 10,
     backgroundColor: COLORS.surfaceHighest,
-    borderRadius: 6,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },
   photoButtonText: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '700',
     color: COLORS.text,
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
   photoButtonSecondary: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: `${COLORS.text}1A`,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   photoButtonSecondaryText: {
-    fontSize: 9,
-    fontWeight: '600',
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.primaryDim,
+    letterSpacing: 0.3,
+  },
+  tipsSection: {
+    paddingHorizontal: 20,
+    marginBottom: 24,
+  },
+  tipCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: COLORS.surfaceContainer,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  tipText: {
+    flex: 1,
+    fontSize: 12,
     color: COLORS.textVariant,
-    letterSpacing: 0.5,
+    lineHeight: 18,
   },
   actionSection: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     gap: 12,
   },
   saveButton: {
     backgroundColor: COLORS.primary,
     paddingVertical: 16,
-    borderRadius: 8,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 6,
+  },
+  saveButtonDisabled: {
+    backgroundColor: COLORS.surfaceHighest,
   },
   saveButtonText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#000000',
+    color: '#000',
     letterSpacing: -0.3,
+  },
+  saveButtonTextDisabled: {
+    color: COLORS.textVariant,
   },
   encryptionNote: {
     textAlign: 'center',
@@ -405,55 +360,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: COLORS.textVariant,
     letterSpacing: 0.3,
-    marginBottom: 24,
-  },
-  bottomSpacer: {
-    height: 60,
-  },
-  floatingButtonsContainer: {
-    position: 'absolute',
-    bottom: 100,
-    left: 16,
-    right: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-  },
-  floatingButtonChat: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: COLORS.surfaceHighest,
-    borderWidth: 1,
-    borderColor: `${COLORS.text}1A`,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: COLORS.text,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  floatingButtonAdd: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: COLORS.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  floatingButtonIcon: {
-    fontSize: 24,
-  },
-  floatingButtonAddIcon: {
-    fontSize: 28,
-    color: '#000000',
-    fontWeight: '700',
   },
 });
 

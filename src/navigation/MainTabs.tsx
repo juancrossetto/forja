@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Modal } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import type { MainTabParamList } from './types';
 
 import HomeStack from './HomeStack';
@@ -17,6 +18,16 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
 
 export const MainTabs: React.FC = () => {
   const [addMenuVisible, setAddMenuVisible] = useState(false);
+  const navigation = useNavigation<any>();
+
+  const closeMenu = useCallback(() => setAddMenuVisible(false), []);
+
+  const navigateFromMenu = useCallback((stack: string, screen: string) => {
+    setAddMenuVisible(false);
+    setTimeout(() => {
+      navigation.navigate(stack, { screen });
+    }, 100);
+  }, [navigation]);
 
   return (
     <>
@@ -68,13 +79,18 @@ export const MainTabs: React.FC = () => {
       <Modal
         visible={addMenuVisible}
         transparent
-        animationType="fade"
+        animationType="none"
         statusBarTranslucent
-        onRequestClose={() => setAddMenuVisible(false)}
+        onRequestClose={closeMenu}
       >
         <AddMenuOverlay
           visible={addMenuVisible}
-          onClose={() => setAddMenuVisible(false)}
+          onClose={closeMenu}
+          onSelectTraining={() => navigateFromMenu('TrainingStack', 'Entrenamientos')}
+          onSelectFood={() => navigateFromMenu('NutritionStack', 'Comidas')}
+          onSelectWater={() => navigateFromMenu('HomeStack', 'Hidratacion')}
+          onSelectPhotos={() => navigateFromMenu('HomeStack', 'CargarFotos')}
+          onSelectMeasurements={() => navigateFromMenu('HomeStack', 'PesoYMedidas')}
         />
       </Modal>
     </>

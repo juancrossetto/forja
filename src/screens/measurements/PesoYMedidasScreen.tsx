@@ -6,9 +6,10 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Image,
   Dimensions,
+  Alert,
 } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
 
@@ -19,256 +20,226 @@ const COLORS = {
   surfaceHighest: '#262626',
   primary: '#D1FF26',
   primaryDim: '#c1ed00',
-  primaryFixed: '#cefc22',
   secondary: '#00e3fd',
-  secondaryFixed: '#26e6ff',
   tertiary: '#ff734a',
-  tertiaryFixed: '#ff9475',
   text: '#ffffff',
   textVariant: '#adaaaa',
+  borderLight: 'rgba(255,255,255,0.05)',
 };
 
 type Gender = 'male' | 'female';
 
-interface MeasurementHotspot {
+interface MeasurementField {
   id: string;
   label: string;
-  position: 'top' | 'left' | 'center' | 'right' | 'bottom';
-  percentage: { top?: string; left?: string; right?: string; bottom?: string };
-}
-
-interface Measurement {
-  id: 'chest' | 'waist' | 'hips' | 'arms' | 'legs';
-  label: string;
+  icon: string;
   value: string;
+  color: string;
 }
 
-const HOTSPOTS: MeasurementHotspot[] = [
-  {
-    id: 'chest',
-    label: 'Pecho',
-    position: 'top',
-    percentage: { top: '30%', left: '50%' },
-  },
-  {
-    id: 'arms',
-    label: 'Brazos',
-    position: 'left',
-    percentage: { top: '35%', left: '30%' },
-  },
-  {
-    id: 'waist',
-    label: 'Cintura',
-    position: 'center',
-    percentage: { top: '45%', left: '50%' },
-  },
-  {
-    id: 'hips',
-    label: 'Cadera',
-    position: 'center',
-    percentage: { top: '55%', left: '50%' },
-  },
-  {
-    id: 'legs',
-    label: 'Piernas',
-    position: 'bottom',
-    percentage: { top: '70%', left: '60%' },
-  },
-];
-
-const MEASUREMENTS: Measurement[] = [
-  { id: 'chest', label: 'Pecho', value: '' },
-  { id: 'waist', label: 'Cintura', value: '' },
-  { id: 'hips', label: 'Cadera', value: '' },
-  { id: 'arms', label: 'Brazos', value: '' },
-  { id: 'legs', label: 'Piernas', value: '' },
+const INITIAL_MEASUREMENTS: MeasurementField[] = [
+  { id: 'chest', label: 'Pecho', icon: 'human-male-height', value: '', color: COLORS.primary },
+  { id: 'waist', label: 'Cintura', icon: 'tape-measure', value: '', color: COLORS.secondary },
+  { id: 'hips', label: 'Cadera', icon: 'human', value: '', color: COLORS.tertiary },
+  { id: 'arms', label: 'Brazos', icon: 'arm-flex', value: '', color: '#4dd0e1' },
+  { id: 'legs', label: 'Piernas', icon: 'walk', value: '', color: '#ff9475' },
 ];
 
 const PesoYMedidasScreen: React.FC = () => {
   const [gender, setGender] = useState<Gender>('male');
   const [weight, setWeight] = useState('');
   const [bodyFat, setBodyFat] = useState('');
-  const [measurements, setMeasurements] = useState<Measurement[]>(MEASUREMENTS);
-  const [selectedMeasurement, setSelectedMeasurement] = useState<'chest' | 'waist' | 'hips' | 'arms' | 'legs'>('chest');
+  const [measurements, setMeasurements] = useState<MeasurementField[]>(INITIAL_MEASUREMENTS);
+  const [selectedId, setSelectedId] = useState<string>('chest');
 
   const updateMeasurement = (id: string, value: string) => {
-    setMeasurements(prev =>
-      prev.map(m => (m.id === id ? { ...m, value } : m))
+    setMeasurements((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, value } : m))
     );
   };
 
-  const selectedMeasurementData = measurements.find(m => m.id === selectedMeasurement);
+  const handleSave = () => {
+    Alert.alert('Guardado', 'Tu registro fue guardado correctamente.');
+  };
 
   return (
     <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* Title */}
         <View style={styles.titleSection}>
-          <Text style={styles.title}>Peso y Medidas</Text>
-          <Text style={styles.subtitle}>Sigue tu transformación</Text>
+          <Text style={styles.title}>Peso y</Text>
+          <Text style={[styles.title, { color: COLORS.primaryDim }]}>Medidas</Text>
+          <Text style={styles.subtitle}>Seguimiento antropométrico</Text>
         </View>
 
-        {/* Gender Toggle and Weight/BF */}
-        <View style={styles.controlsSection}>
-          {/* Gender Toggle */}
+        {/* Gender Toggle */}
+        <View style={styles.section}>
           <View style={styles.genderToggle}>
             <TouchableOpacity
-              style={[
-                styles.genderButton,
-                gender === 'male' && styles.genderButtonActive,
-              ]}
+              style={[styles.genderBtn, gender === 'male' && styles.genderBtnActive]}
               onPress={() => setGender('male')}
             >
-              <Text
-                style={[
-                  styles.genderButtonText,
-                  gender === 'male' && styles.genderButtonTextActive,
-                ]}
-              >
+              <MaterialCommunityIcons
+                name="gender-male"
+                size={18}
+                color={gender === 'male' ? COLORS.bg : COLORS.textVariant}
+              />
+              <Text style={[styles.genderText, gender === 'male' && styles.genderTextActive]}>
                 Hombre
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[
-                styles.genderButton,
-                gender === 'female' && styles.genderButtonActive,
-              ]}
+              style={[styles.genderBtn, gender === 'female' && styles.genderBtnActive]}
               onPress={() => setGender('female')}
             >
-              <Text
-                style={[
-                  styles.genderButtonText,
-                  gender === 'female' && styles.genderButtonTextActive,
-                ]}
-              >
+              <MaterialCommunityIcons
+                name="gender-female"
+                size={18}
+                color={gender === 'female' ? COLORS.bg : COLORS.textVariant}
+              />
+              <Text style={[styles.genderText, gender === 'female' && styles.genderTextActive]}>
                 Mujer
               </Text>
             </TouchableOpacity>
           </View>
+        </View>
 
-          {/* Weight Input */}
-          <View style={styles.inputCard}>
-            <Text style={styles.inputLabel}>Peso Actual</Text>
-            <View style={styles.inputGroup}>
-              <TextInput
-                style={styles.inputField}
-                placeholder="00.0"
-                placeholderTextColor={COLORS.textVariant}
-                value={weight}
-                onChangeText={setWeight}
-                keyboardType="decimal-pad"
-              />
-              <Text style={styles.inputUnit}>KG</Text>
+        {/* Weight & Body Fat Cards */}
+        <View style={styles.section}>
+          <View style={styles.cardRow}>
+            <View style={[styles.inputCard, { borderLeftColor: COLORS.primary }]}>
+              <View style={styles.inputCardHeader}>
+                <MaterialCommunityIcons name="scale-bathroom" size={16} color={COLORS.primary} />
+                <Text style={styles.inputLabel}>Peso</Text>
+              </View>
+              <View style={styles.inputGroup}>
+                <TextInput
+                  style={styles.inputField}
+                  placeholder="0.0"
+                  placeholderTextColor="rgba(255,255,255,0.2)"
+                  value={weight}
+                  onChangeText={setWeight}
+                  keyboardType="decimal-pad"
+                />
+                <Text style={styles.inputUnit}>KG</Text>
+              </View>
             </View>
-          </View>
 
-          {/* Body Fat Input */}
-          <View style={styles.inputCard}>
-            <Text style={styles.inputLabel}>Grasa Corporal</Text>
-            <View style={styles.inputGroup}>
-              <TextInput
-                style={styles.inputField}
-                placeholder="00"
-                placeholderTextColor={COLORS.textVariant}
-                value={bodyFat}
-                onChangeText={setBodyFat}
-                keyboardType="number-pad"
-              />
-              <Text style={styles.inputUnit}>%</Text>
+            <View style={[styles.inputCard, { borderLeftColor: COLORS.secondary }]}>
+              <View style={styles.inputCardHeader}>
+                <MaterialCommunityIcons name="percent" size={16} color={COLORS.secondary} />
+                <Text style={styles.inputLabel}>Grasa</Text>
+              </View>
+              <View style={styles.inputGroup}>
+                <TextInput
+                  style={styles.inputField}
+                  placeholder="0"
+                  placeholderTextColor="rgba(255,255,255,0.2)"
+                  value={bodyFat}
+                  onChangeText={setBodyFat}
+                  keyboardType="decimal-pad"
+                />
+                <Text style={styles.inputUnit}>%</Text>
+              </View>
             </View>
           </View>
         </View>
 
-        {/* Body Avatar with Hotspots */}
-        <View style={styles.avatarSection}>
-          <View style={styles.avatarFrame}>
-            {/* Body Image */}
-            <Image
-              source={{
-                uri: 'https://via.placeholder.com/200x300',
-              }}
-              style={styles.avatarImage}
+        {/* Body Figure with Hotspots */}
+        <View style={styles.section}>
+          <View style={styles.bodyFrame}>
+            <MaterialCommunityIcons
+              name={gender === 'male' ? 'human-male' : 'human-female'}
+              size={200}
+              color="rgba(209,255,38,0.15)"
+              style={styles.bodyIcon}
             />
-
-            {/* Overlay Gradient */}
-            <View style={styles.avatarGradient} />
-
-            {/* Hotspots */}
-            {HOTSPOTS.map(hotspot => (
-              <TouchableOpacity
-                key={hotspot.id}
-                style={[
-                  styles.hotspot,
-                  {
-                    top: hotspot.percentage.top,
-                    left: hotspot.percentage.left,
-                  },
-                  selectedMeasurement === hotspot.id && styles.hotspotActive,
-                ]}
-                onPress={() => setSelectedMeasurement(hotspot.id as any)}
-              >
-                <View
+            {/* Hotspot dots overlaid */}
+            {measurements.map((m) => {
+              const positions: Record<string, { top: number; left: number }> = {
+                chest: { top: 65, left: width * 0.32 },
+                waist: { top: 115, left: width * 0.5 - 24 },
+                hips: { top: 155, left: width * 0.32 },
+                arms: { top: 85, left: width * 0.58 },
+                legs: { top: 210, left: width * 0.5 - 24 },
+              };
+              const pos = positions[m.id] || { top: 0, left: 0 };
+              const isActive = selectedId === m.id;
+              return (
+                <TouchableOpacity
+                  key={m.id}
                   style={[
-                    styles.hotspotInner,
-                    selectedMeasurement === hotspot.id &&
-                      styles.hotspotInnerActive,
+                    styles.hotspot,
+                    { top: pos.top, left: pos.left },
+                    isActive && { backgroundColor: m.color, borderColor: m.color },
                   ]}
-                />
-              </TouchableOpacity>
-            ))}
-
-            {/* Selected Label */}
-            <View style={styles.selectedLabel}>
-              <Text style={styles.selectedLabelSubtitle}>Zona Seleccionada</Text>
-              <Text style={styles.selectedLabelText}>
-                {selectedMeasurementData?.label}
+                  onPress={() => setSelectedId(m.id)}
+                >
+                  <View style={[styles.hotspotDot, isActive && { backgroundColor: '#000' }]} />
+                </TouchableOpacity>
+              );
+            })}
+            {/* Selected label */}
+            <View style={styles.bodyLabel}>
+              <Text style={styles.bodyLabelSub}>Zona</Text>
+              <Text style={styles.bodyLabelMain}>
+                {measurements.find((m) => m.id === selectedId)?.label}
               </Text>
             </View>
           </View>
         </View>
 
-        {/* Measurements Input List */}
-        <View style={styles.measurementsSection}>
-          {measurements.map((measurement, index) => (
-            <View
-              key={measurement.id}
-              style={[
-                styles.measurementRow,
-                selectedMeasurement === measurement.id &&
-                  styles.measurementRowActive,
-                index > 0 && styles.measurementRowInactive,
-              ]}
-            >
-              <View style={styles.measurementLabel}>
-                <Text style={styles.measurementIcon}>📏</Text>
-                <Text style={styles.measurementText}>{measurement.label}</Text>
-              </View>
-              <View style={styles.measurementInput}>
-                <TextInput
-                  style={styles.measurementInputField}
-                  placeholder="00"
-                  placeholderTextColor={COLORS.textVariant}
-                  value={measurement.value}
-                  onChangeText={value =>
-                    updateMeasurement(measurement.id, value)
-                  }
-                  keyboardType="number-pad"
-                  editable={selectedMeasurement === measurement.id}
-                />
-                <Text style={styles.measurementUnit}>cm</Text>
-              </View>
-            </View>
-          ))}
+        {/* Measurements List */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Medidas corporales</Text>
+          <View style={styles.measurementsList}>
+            {measurements.map((m) => {
+              const isActive = selectedId === m.id;
+              return (
+                <TouchableOpacity
+                  key={m.id}
+                  style={[
+                    styles.measurementRow,
+                    { borderLeftColor: isActive ? m.color : COLORS.surfaceHighest },
+                    isActive && styles.measurementRowActive,
+                  ]}
+                  onPress={() => setSelectedId(m.id)}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.measurementLeft}>
+                    <View style={[styles.measurementIcon, { backgroundColor: `${m.color}15` }]}>
+                      <MaterialCommunityIcons name={m.icon as any} size={18} color={m.color} />
+                    </View>
+                    <Text style={[styles.measurementLabel, isActive && { color: COLORS.text }]}>
+                      {m.label}
+                    </Text>
+                  </View>
+                  <View style={styles.measurementRight}>
+                    <TextInput
+                      style={[styles.measurementInput, isActive && styles.measurementInputActive]}
+                      placeholder="--"
+                      placeholderTextColor="rgba(255,255,255,0.15)"
+                      value={m.value}
+                      onChangeText={(v) => updateMeasurement(m.id, v)}
+                      keyboardType="decimal-pad"
+                      onFocus={() => setSelectedId(m.id)}
+                    />
+                    <Text style={styles.measurementUnit}>cm</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
 
-        {/* Save Button */}
+        {/* Save */}
         <View style={styles.actionSection}>
-          <TouchableOpacity style={styles.saveButton}>
+          <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
             <Text style={styles.saveButtonText}>Guardar Registro</Text>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.bottomSpacer} />
+        <View style={{ height: 100 }} />
       </ScrollView>
     </View>
   );
@@ -280,261 +251,224 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bg,
   },
   titleSection: {
-    paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 16,
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 20,
   },
   title: {
-    fontSize: 32,
+    fontSize: 30,
     fontWeight: '700',
     color: COLORS.text,
     letterSpacing: -0.8,
-    marginBottom: 4,
+    lineHeight: 34,
   },
   subtitle: {
     fontSize: 12,
     fontWeight: '600',
     color: COLORS.textVariant,
     letterSpacing: 0.5,
+    marginTop: 10,
   },
-  controlsSection: {
-    paddingHorizontal: 16,
+  section: {
+    paddingHorizontal: 24,
     marginBottom: 24,
-    gap: 12,
   },
   genderToggle: {
     flexDirection: 'row',
     backgroundColor: COLORS.surface,
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 4,
     gap: 4,
   },
-  genderButton: {
+  genderBtn: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 6,
+    flexDirection: 'row',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  genderButtonActive: {
-    backgroundColor: COLORS.surfaceHighest,
-    shadowColor: COLORS.text,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+  genderBtnActive: {
+    backgroundColor: COLORS.primary,
   },
-  genderButtonText: {
-    fontSize: 12,
+  genderText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textVariant,
+  },
+  genderTextActive: {
+    color: COLORS.bg,
+  },
+  cardRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  inputCard: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    borderRadius: 14,
+    borderLeftWidth: 3,
+    padding: 16,
+  },
+  inputCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  inputLabel: {
+    fontSize: 11,
     fontWeight: '600',
     color: COLORS.textVariant,
     letterSpacing: 0.5,
   },
-  genderButtonTextActive: {
-    color: COLORS.primaryFixed,
-  },
-  inputCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    borderLeftWidth: 2,
-    borderLeftColor: COLORS.primaryFixed,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    shadowColor: COLORS.text,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  inputLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: COLORS.textVariant,
-    letterSpacing: 0.3,
-    marginBottom: 4,
-  },
   inputGroup: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    gap: 4,
   },
   inputField: {
     flex: 1,
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: '700',
     color: COLORS.text,
     padding: 0,
   },
   inputUnit: {
-    fontSize: 12,
+    fontSize: 14,
     color: COLORS.textVariant,
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: 1,
   },
-  avatarSection: {
-    paddingHorizontal: 16,
-    marginBottom: 24,
-  },
-  avatarFrame: {
+  bodyFrame: {
     backgroundColor: COLORS.surface,
     borderRadius: 16,
-    aspectRatio: 4 / 5,
+    height: 300,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: `${COLORS.text}08`,
+    borderColor: COLORS.borderLight,
     position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  avatarImage: {
-    ...StyleSheet.absoluteFillObject,
-    width: '100%',
-    height: '100%',
-    opacity: 0.6,
-  },
-  avatarGradient: {
-    ...StyleSheet.absoluteFillObject,
-    background: 'linear-gradient(to bottom, transparent, rgba(14, 14, 14, 0.7))',
+  bodyIcon: {
+    opacity: 1,
   },
   hotspot: {
     position: 'absolute',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: `${COLORS.primaryFixed}4D`,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(209,255,38,0.25)',
     borderWidth: 2,
-    borderColor: COLORS.primaryFixed,
+    borderColor: 'rgba(209,255,38,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: -16,
-    marginTop: -16,
-    shadowColor: COLORS.primaryFixed,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 4,
   },
-  hotspotActive: {
-    borderColor: COLORS.text,
-    backgroundColor: COLORS.primaryFixed,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginLeft: -20,
-    marginTop: -20,
-    shadowOpacity: 0.8,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  hotspotInner: {
+  hotspotDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: `${COLORS.text}66`,
+    backgroundColor: 'rgba(255,255,255,0.5)',
   },
-  hotspotInnerActive: {
-    backgroundColor: COLORS.text,
-  },
-  selectedLabel: {
+  bodyLabel: {
     position: 'absolute',
     bottom: 16,
     left: 16,
-    zIndex: 10,
   },
-  selectedLabelSubtitle: {
+  bodyLabelSub: {
     fontSize: 10,
     fontWeight: '600',
-    color: COLORS.primaryFixed,
-    letterSpacing: 0.5,
+    color: COLORS.primaryDim,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
     marginBottom: 2,
   },
-  selectedLabelText: {
+  bodyLabelMain: {
     fontSize: 20,
     fontWeight: '700',
     color: COLORS.text,
-    letterSpacing: -0.4,
   },
-  measurementsSection: {
-    paddingHorizontal: 16,
-    marginBottom: 24,
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 14,
+  },
+  measurementsList: {
     gap: 8,
   },
   measurementRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    backgroundColor: COLORS.surfaceHigh,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    backgroundColor: COLORS.surface,
     borderRadius: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: COLORS.primaryFixed,
+    borderLeftWidth: 3,
   },
   measurementRowActive: {
     backgroundColor: COLORS.surfaceHigh,
-    borderLeftColor: COLORS.primaryFixed,
   },
-  measurementRowInactive: {
-    opacity: 0.6,
-    borderLeftColor: COLORS.textVariant,
-  },
-  measurementLabel: {
+  measurementLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
   },
   measurementIcon: {
-    fontSize: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  measurementText: {
-    fontSize: 12,
+  measurementLabel: {
+    fontSize: 14,
     fontWeight: '600',
-    color: COLORS.text,
-    letterSpacing: 0.3,
+    color: COLORS.textVariant,
   },
-  measurementInput: {
+  measurementRight: {
     flexDirection: 'row',
     alignItems: 'baseline',
     gap: 4,
   },
-  measurementInputField: {
-    fontSize: 16,
+  measurementInput: {
+    fontSize: 20,
     fontWeight: '700',
     color: COLORS.text,
     backgroundColor: COLORS.surfaceHighest,
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    width: 60,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    width: 70,
     textAlign: 'right',
   },
+  measurementInputActive: {
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
   measurementUnit: {
-    fontSize: 10,
+    fontSize: 12,
     color: COLORS.textVariant,
     fontWeight: '600',
-    letterSpacing: 0.3,
   },
   actionSection: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 24,
     marginBottom: 24,
   },
   saveButton: {
     backgroundColor: COLORS.primary,
-    paddingVertical: 16,
-    borderRadius: 8,
+    paddingVertical: 18,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 6,
   },
   saveButtonText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#000000',
-    letterSpacing: -0.3,
-  },
-  bottomSpacer: {
-    height: 32,
+    color: '#000',
+    letterSpacing: 0.5,
   },
 });
 
