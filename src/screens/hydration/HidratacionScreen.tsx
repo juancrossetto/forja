@@ -174,12 +174,16 @@ export default function HidratacionScreen() {
     setSaving(true);
     const ok = await saveHydration(currentMl, todayISO());
     setSaving(false);
-    if (ok) Alert.alert('Guardado', `Registraste ${(currentMl / 1000).toFixed(1)}L hoy.`);
+    const fmt = currentMl % 500 === 0 ? (currentMl / 1000).toFixed(1) : (currentMl / 1000).toFixed(2);
+    if (ok) Alert.alert('Guardado', `Registraste ${fmt}L hoy.`);
     else Alert.alert('Error', 'No se pudo guardar. Verificá tu conexión.');
   };
 
   const progress = Math.min(currentMl / GOAL_ML, 1);
-  const liters = (currentMl / 1000).toFixed(1);
+  // Smart format: 2 decimals when not a multiple of 500 (e.g. 250→"0.25", 500→"0.5", 1000→"1.0")
+  const liters = currentMl % 500 === 0
+    ? (currentMl / 1000).toFixed(1)
+    : (currentMl / 1000).toFixed(2);
   const avgMl = Math.round(weekly.filter((d) => d.ml > 0).reduce((a, b) => a + b.ml, 0) / Math.max(weekly.filter((d) => d.ml > 0).length, 1));
   const maxMl = Math.max(...weekly.map((d) => d.ml), 1);
 
@@ -247,8 +251,8 @@ export default function HidratacionScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.saveBtn} onPress={() => Alert.alert('Guardado', 'Tu registro fue guardado.')} activeOpacity={0.9}>
-          <Text style={styles.saveBtnText}>GUARDAR REGISTRO</Text>
+        <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving} activeOpacity={0.9}>
+          <Text style={styles.saveBtnText}>{saving ? 'GUARDANDO...' : 'GUARDAR REGISTRO'}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
