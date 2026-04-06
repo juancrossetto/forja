@@ -35,11 +35,7 @@ export const HomeStack: React.FC = () => {
       <Stack.Screen
         name="Perfil"
         component={ProfileScreen}
-        options={{
-          headerShown: true,
-          title: 'Perfil',
-          headerTransparent: true,
-        }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="CargarFotos"

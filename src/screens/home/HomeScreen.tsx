@@ -26,6 +26,7 @@ import {
   toggleGoal as toggleGoalApi,
   type DailyGoal,
 } from '../../services/goalsService';
+import { getProfile } from '../../services/profileService';
 
 type Nav = NativeStackNavigationProp<HomeStackParamList>;
 
@@ -114,6 +115,7 @@ const HomeScreen: React.FC = () => {
     return t;
   });
 
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [goals, setGoals] = useState<DailyGoal[]>([]);
   const [goalsLoading, setGoalsLoading] = useState(true);
@@ -138,6 +140,11 @@ const HomeScreen: React.FC = () => {
     // Sync active date to global store so other screens (e.g. Hidratacion) know which day we're on
     setActiveDate(selectedDate.toISOString().split('T')[0]);
   }, [selectedDate, loadGoals, setActiveDate]);
+
+  // Load avatar from profile
+  useEffect(() => {
+    getProfile().then((p) => { if (p?.avatar_url) setAvatarUrl(p.avatar_url); });
+  }, []);
 
   // Scroll to today on mount
   useEffect(() => {
@@ -271,11 +278,15 @@ const HomeScreen: React.FC = () => {
           <Text style={styles.headerTitle}>MÉTODO R3SET</Text>
         </View>
         <TouchableOpacity onPress={() => navigation.navigate('Perfil')}>
-          <View style={styles.avatarPlaceholder}>
-            <Text style={styles.avatarInitial}>
-              {(user?.name?.[0] ?? user?.email?.[0] ?? 'U').toUpperCase()}
-            </Text>
-          </View>
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+          ) : (
+            <View style={styles.avatarPlaceholder}>
+              <Text style={styles.avatarInitial}>
+                {(user?.name?.[0] ?? user?.email?.[0] ?? 'U').toUpperCase()}
+              </Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -527,10 +538,17 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     letterSpacing: 1.5,
   },
+  avatarImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(209,255,38,0.4)',
+  },
   avatarPlaceholder: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: 8,
     backgroundColor: COLORS.surfaceHighest,
     borderWidth: 1,
     borderColor: COLORS.primary,

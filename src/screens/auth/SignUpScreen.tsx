@@ -10,9 +10,13 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Linking,
+  Image,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import * as ImagePicker from 'expo-image-picker';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuthStore } from '../../store/authStore';
+import { uploadAvatar } from '../../services/profileService';
 
 type SignUpScreenProps = {
   navigation: NativeStackNavigationProp<any>;
@@ -26,8 +30,21 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation }) => {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
 
   const signup = useAuthStore((state) => state.signup);
+
+  const handlePickAvatar = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setAvatarUri(result.assets[0].uri);
+    }
+  };
 
   const handleSignUp = async () => {
     if (!username || !email || !password) {
@@ -45,7 +62,8 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation }) => {
 
     try {
       await signup(email, password, username);
-      // Navigation will be handled by the auth store
+      // Upload avatar after signup if one was selected
+      if (avatarUri) await uploadAvatar(avatarUri);
     } catch (err: any) {
       setError(err.message || 'Error al crear la cuenta');
     } finally {
@@ -137,6 +155,23 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation }) => {
 
           {/* Signup Form */}
           <View style={styles.formContainer}>
+            {/* Avatar Picker */}
+            <View style={styles.avatarPickerContainer}>
+              <TouchableOpacity style={styles.avatarPicker} onPress={handlePickAvatar} activeOpacity={0.8}>
+                {avatarUri ? (
+                  <Image source={{ uri: avatarUri }} style={styles.avatarPreview} />
+                ) : (
+                  <View style={styles.avatarPlaceholder}>
+                    <MaterialCommunityIcons name="account" size={36} color="rgba(255,255,255,0.2)" />
+                  </View>
+                )}
+                <View style={styles.avatarCameraBtn}>
+                  <MaterialCommunityIcons name="camera" size={13} color="#000" />
+                </View>
+              </TouchableOpacity>
+              <Text style={styles.avatarHint}>FOTO DE PERFIL{'\n'}(OPCIONAL)</Text>
+            </View>
+
             {/* Username Field */}
             <View style={styles.fieldContainer}>
               <Text style={styles.fieldLabel}>Username</Text>
@@ -516,6 +551,56 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#c1ed00',
     fontFamily: 'Space Grotesk',
+  },
+  avatarPickerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 20,
+    marginBottom: 8,
+  },
+  avatarPicker: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    position: 'relative',
+  },
+  avatarPreview: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 2,
+    borderColor: 'rgba(209,255,38,0.4)',
+  },
+  avatarPlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#131313',
+    borderWidth: 2,
+    borderColor: 'rgba(72,72,71,0.4)',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarCameraBtn: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#D1FF26',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarHint: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: 'rgba(118,117,117,1)',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    fontFamily: 'Lexend',
+    lineHeight: 16,
   },
 });
 
