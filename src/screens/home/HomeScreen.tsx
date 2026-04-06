@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   Modal,
   Platform,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -101,6 +102,48 @@ function formatDateHeader(date: Date): string {
   return `${date.getDate()} de ${MONTHS[date.getMonth()]}`;
 }
 
+// ── Animated Goal Item ──────────────────────────────────────────────────────
+const GoalItem = React.memo(({ goal, onToggle }: { goal: DailyGoal; onToggle: (g: DailyGoal) => void }) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const bgAnim    = useRef(new Animated.Value(goal.completed ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.timing(bgAnim, {
+      toValue: goal.completed ? 1 : 0,
+      duration: 280,
+      useNativeDriver: false,
+    }).start();
+  }, [goal.completed]);
+
+  const handlePress = () => {
+    Animated.sequence([
+      Animated.timing(scaleAnim, { toValue: 0.72, duration: 75, useNativeDriver: true }),
+      Animated.spring(scaleAnim, { toValue: 1, friction: 3, tension: 220, useNativeDriver: true }),
+    ]).start();
+    onToggle(goal);
+  };
+
+  const bgColor = bgAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['rgba(209,255,38,0)', 'rgba(209,255,38,0.06)'],
+  });
+
+  return (
+    <TouchableOpacity onPress={handlePress} activeOpacity={0.8}>
+      <Animated.View style={[styles.goalItem, { backgroundColor: bgColor }]}>
+        <Animated.View style={[styles.goalCheckbox, goal.completed && styles.goalCheckboxCompleted, { transform: [{ scale: scaleAnim }] }]}>
+          {goal.completed && <MaterialCommunityIcons name="check" size={13} color="#000" />}
+        </Animated.View>
+        <Text style={[styles.goalText, goal.completed && styles.goalTextCompleted]}>{goal.text}</Text>
+        {goal.completed && (
+          <MaterialCommunityIcons name="check-circle" size={16} color={COLORS.primary} style={{ opacity: 0.55 }} />
+        )}
+      </Animated.View>
+    </TouchableOpacity>
+  );
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation<Nav>();
   const user = useAuthStore((s) => s.user);
@@ -119,6 +162,7 @@ const HomeScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [goals, setGoals] = useState<DailyGoal[]>([]);
   const [goalsLoading, setGoalsLoading] = useState(true);
+  const progressAnim = useRef(new Animated.Value(0)).current;
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [pickerDate, setPickerDate] = useState(new Date());
 
@@ -232,6 +276,14 @@ const HomeScreen: React.FC = () => {
   };
 
   const completedGoals = goals.filter((g) => g.completed).length;
+
+  useEffect(() => {
+    Animated.timing(progressAnim, {
+      toValue: goals.length > 0 ? completedGoals / goals.length : 0,
+      duration: 450,
+      useNativeDriver: false,
+    }).start();
+  }, [completedGoals, goals.length]);
   const isToday = isSameDay(selectedDate, new Date());
 
   const renderCalendarDay = useCallback(
@@ -399,32 +451,69 @@ const HomeScreen: React.FC = () => {
 
           {/* Session Card */}
           <View style={styles.sessionCard}>
-            <View style={styles.sessionHeader}>
-              <View style={styles.sessionBadge}>
-                <Text style={styles.sessionBadgeText}>EN VIVO</Text>
+            <View style={styles.sessionTopRow}>
+              <View style={styles.sessionLiveBadge}>
+                <View style={styles.sessionLiveDot} />
+                <Text style={styles.sessionLiveText}>EN VIVO</Text>
               </View>
-              <Text style={styles.sessionTime}>18:00 - 18:30</Text>
+              <View style={styles.sessionTimeRow}>
+                <MaterialCommunityIcons name="clock-outline" size={11} color={COLORS.textTertiary} />
+                <Text style={styles.sessionTime}>18:00 – 18:30</Text>
+              </View>
             </View>
+
             <Text style={styles.sessionTitle}>Sesión 1-1</Text>
-            <Text style={styles.sessionDescription}>
-              Revisión de técnica y ajuste de plan nutricional con Coach Alex.
-            </Text>
-            <TouchableOpacity style={styles.sessionLink}>
-              <Text style={styles.sessionLinkText}>Unirse a la llamada</Text>
-              <MaterialCommunityIcons name="arrow-right" size={12} color={COLORS.primary} />
+
+            <View style={styles.sessionCoachRow}>
+              <View style={styles.sessionCoachAvatar}>
+                <MaterialCommunityIcons name="account" size={15} color={COLORS.textTertiary} />
+              </View>
+              <Text style={styles.sessionCoachName}>Coach Alex</Text>
+              <View style={styles.sessionDividerDot} />
+              <Text style={styles.sessionDescription}>Nutrición · Técnica</Text>
+            </View>
+
+            <TouchableOpacity style={styles.sessionCTA} activeOpacity={0.85}>
+              <MaterialCommunityIcons name="video" size={14} color="#000" />
+              <Text style={styles.sessionCTAText}>UNIRSE A LA LLAMADA</Text>
             </TouchableOpacity>
           </View>
 
           {/* Goals Section */}
           <View style={styles.goalsSection}>
             <View style={styles.goalsSectionHeader}>
-              <Text style={styles.goalsSectionTitle}>Metas del día</Text>
+              <View>
+                <Text style={styles.goalsSectionTitle}>Metas del día</Text>
+                {!goalsLoading && goals.length > 0 && (
+                  <Text style={styles.goalsSubtitle}>
+                    {completedGoals} de {goals.length} completadas
+                  </Text>
+                )}
+              </View>
               {!goalsLoading && goals.length > 0 && (
-                <Text style={styles.goalsProgress}>
-                  {completedGoals}/{goals.length} Completado
-                </Text>
+                <View style={styles.goalsRing}>
+                  <Text style={styles.goalsRingText}>
+                    {Math.round((completedGoals / goals.length) * 100)}%
+                  </Text>
+                </View>
               )}
             </View>
+
+            {!goalsLoading && goals.length > 0 && (
+              <View style={styles.goalsProgressBarBg}>
+                <Animated.View
+                  style={[
+                    styles.goalsProgressBarFill,
+                    {
+                      width: progressAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0%', '100%'],
+                      }),
+                    },
+                  ]}
+                />
+              </View>
+            )}
 
             {goalsLoading ? (
               <View style={styles.goalsLoadingContainer}>
@@ -433,30 +522,7 @@ const HomeScreen: React.FC = () => {
             ) : (
               <View style={styles.goalsList}>
                 {goals.map((goal) => (
-                  <TouchableOpacity
-                    key={goal.id}
-                    style={styles.goalItem}
-                    onPress={() => handleToggleGoal(goal)}
-                  >
-                    <View
-                      style={[
-                        styles.goalCheckbox,
-                        goal.completed && styles.goalCheckboxCompleted,
-                      ]}
-                    >
-                      {goal.completed && (
-                        <MaterialCommunityIcons name="check" size={14} color="#000" />
-                      )}
-                    </View>
-                    <Text
-                      style={[
-                        styles.goalText,
-                        goal.completed && styles.goalTextCompleted,
-                      ]}
-                    >
-                      {goal.text}
-                    </Text>
-                  </TouchableOpacity>
+                  <GoalItem key={goal.id} goal={goal} onToggle={handleToggleGoal} />
                 ))}
               </View>
             )}
@@ -734,67 +800,115 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.textTertiary,
   },
+  // Session Card
   sessionCard: {
-    paddingHorizontal: 24,
-    paddingVertical: 24,
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#ff5722',
+    borderRadius: 16,
+    padding: 20,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,115,74,0.15)',
+    overflow: 'hidden',
   },
-  sessionHeader: {
+  sessionTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
   },
-  sessionBadge: {
-    backgroundColor: 'rgba(255, 87, 34, 0.2)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  sessionBadgeText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#ff9475',
-    letterSpacing: 1.5,
-  },
-  sessionTime: {
-    fontSize: 9,
-    color: COLORS.textTertiary,
-    fontWeight: '600',
-  },
-  sessionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-    marginBottom: 8,
-  },
-  sessionDescription: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    lineHeight: 18,
-    marginBottom: 12,
-  },
-  sessionLink: {
+  sessionLiveBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: 12,
+    backgroundColor: 'rgba(255,115,74,0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,115,74,0.3)',
   },
-  sessionLinkText: {
-    fontSize: 10,
+  sessionLiveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.tertiary,
+  },
+  sessionLiveText: {
+    fontSize: 9,
     fontWeight: '700',
-    color: COLORS.primary,
-    letterSpacing: 1,
+    color: COLORS.tertiary,
+    letterSpacing: 1.5,
   },
+  sessionTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  sessionTime: {
+    fontSize: 11,
+    color: COLORS.textTertiary,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+  sessionTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: COLORS.textPrimary,
+    letterSpacing: -0.5,
+    marginBottom: 12,
+  },
+  sessionCoachRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
+  sessionCoachAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 6,
+    backgroundColor: COLORS.surfaceHighest,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sessionCoachName: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  sessionDividerDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: COLORS.textTertiary,
+  },
+  sessionDescription: {
+    fontSize: 11,
+    color: COLORS.textTertiary,
+    fontWeight: '500',
+    letterSpacing: 0.5,
+  },
+  sessionCTA: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: COLORS.primary,
+    paddingVertical: 13,
+    borderRadius: 10,
+  },
+  sessionCTAText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#000',
+    letterSpacing: 1.5,
+  },
+
+  // Goals Section
   goalsSection: {
-    paddingHorizontal: 24,
-    paddingVertical: 24,
     backgroundColor: COLORS.surfaceLow,
-    borderRadius: 12,
+    borderRadius: 16,
+    padding: 20,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
     marginBottom: 24,
@@ -802,39 +916,73 @@ const styles = StyleSheet.create({
   goalsSectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
+    alignItems: 'flex-start',
+    marginBottom: 16,
   },
   goalsSectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 18,
+    fontWeight: '800',
     color: COLORS.textPrimary,
+    marginBottom: 4,
   },
-  goalsProgress: {
-    fontSize: 9,
-    fontWeight: '700',
+  goalsSubtitle: {
+    fontSize: 11,
+    color: COLORS.textTertiary,
+    fontWeight: '500',
+  },
+  goalsRing: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(209,255,38,0.07)',
+  },
+  goalsRingText: {
+    fontSize: 12,
+    fontWeight: '800',
     color: COLORS.primary,
+  },
+  goalsProgressBarBg: {
+    height: 3,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 2,
+    marginBottom: 20,
+    overflow: 'hidden',
+  },
+  goalsProgressBarFill: {
+    height: 3,
+    backgroundColor: COLORS.primary,
+    borderRadius: 2,
   },
   goalsLoadingContainer: {
     paddingVertical: 20,
     alignItems: 'center',
   },
   goalsList: {
-    gap: 16,
+    gap: 4,
   },
   goalItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 14,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: 'transparent',
   },
+
   goalCheckbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.2)',
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.18)',
     justifyContent: 'center',
     alignItems: 'center',
+    flexShrink: 0,
   },
   goalCheckboxCompleted: {
     backgroundColor: COLORS.primary,
@@ -844,6 +992,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.textPrimary,
     flex: 1,
+    fontWeight: '500',
   },
   goalTextCompleted: {
     textDecorationLine: 'line-through',
