@@ -61,6 +61,7 @@ export type HomeStackParamList = {
 // Nutrition Stack Types
 export type NutritionStackParamList = {
   Comidas: undefined;
+  RegistrarComida: undefined;
   DetalleComida?: {
     mealId: string;
     mealName: string;

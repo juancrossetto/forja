@@ -44,26 +44,16 @@ export const HomeStack: React.FC = () => {
       <Stack.Screen
         name="CargarFotos"
         component={CargarFotosScreen}
-        options={{ presentation: 'modal', headerShown: false }}
+        options={{ presentation: 'fullScreenModal', headerShown: false }}
       />
       <Stack.Group
         screenOptions={{
-          presentation: 'modal',
-          headerShown: true,
-          headerTransparent: true,
-          headerTintColor: '#D1FF26',
+          presentation: 'fullScreenModal',
+          headerShown: false,
         }}
       >
-        <Stack.Screen
-          name="PesoYMedidas"
-          component={PesoYMedidasScreen}
-          options={{ title: 'Peso y Medidas' }}
-        />
-        <Stack.Screen
-          name="Hidratacion"
-          component={HidratacionScreen}
-          options={{ headerShown: false }}
-        />
+        <Stack.Screen name="PesoYMedidas" component={PesoYMedidasScreen} />
+        <Stack.Screen name="Hidratacion" component={HidratacionScreen} />
       </Stack.Group>
     </Stack.Navigator>
   );

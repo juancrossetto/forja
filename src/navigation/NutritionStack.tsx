@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { NutritionStackParamList } from './types';
 
 import ComidasScreen from '../screens/nutrition/ComidasScreen';
+import RegistrarComidaScreen from '../screens/nutrition/RegistrarComidaScreen';
 
 const Stack = createNativeStackNavigator<NutritionStackParamList>();
 
@@ -18,6 +19,7 @@ export const NutritionStack: React.FC = () => {
       }}
     >
       <Stack.Screen name="Comidas" component={ComidasScreen} />
+      <Stack.Screen name="RegistrarComida" component={RegistrarComidaScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 };

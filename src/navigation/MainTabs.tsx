@@ -88,7 +88,7 @@ export const MainTabs: React.FC = () => {
           visible={addMenuVisible}
           onClose={closeMenu}
           onSelectTraining={() => navigateFromMenu('TrainingStack', 'Entrenamientos')}
-          onSelectFood={() => navigateFromMenu('NutritionStack', 'Comidas')}
+          onSelectFood={() => navigateFromMenu('NutritionStack', 'RegistrarComida')}
           onSelectWater={() => navigateFromMenu('HomeStack', 'Hidratacion')}
           onSelectPhotos={() => navigateFromMenu('HomeStack', 'CargarFotos')}
           onSelectMeasurements={() => navigateFromMenu('HomeStack', 'PesoYMedidas')}
