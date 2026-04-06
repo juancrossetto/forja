@@ -7,8 +7,9 @@ import {
   Dimensions,
   Alert,
   Animated,
+  ScrollView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
 import { useNavigation } from '@react-navigation/native';
@@ -130,6 +131,7 @@ function formatL(ml: number): string {
 
 export default function HidratacionScreen() {
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const activeDate = useUIStore((s) => s.activeDate);
   const isToday = activeDate === todayISO();
 
@@ -207,7 +209,7 @@ export default function HidratacionScreen() {
   const maxMl = Math.max(...weekly.map((d) => d.ml), 1);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <View style={[styles.safeArea, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
 
       {/* ── Header ── */}
       <View style={styles.screenHeader}>
@@ -216,7 +218,7 @@ export default function HidratacionScreen() {
         </TouchableOpacity>
         <View style={styles.titleBlock}>
           <Text style={styles.title}>HIDRATACIÓN</Text>
-          <Text style={styles.subtitle}>RENDIMIENTO COGNITIVO &amp; FÍSICO</Text>
+          <Text style={styles.subtitle}>RENDIMIENTO COGNITIVO & FÍSICO</Text>
         </View>
         {!isToday && (
           <View style={styles.dateBadge}>
@@ -226,97 +228,108 @@ export default function HidratacionScreen() {
         )}
       </View>
 
-      {/* ── Water Box ── */}
-      <View style={styles.waterBox}>
-        <WaterWaves progress={progress} />
-        <View style={styles.bubble1} />
-        <View style={styles.bubble2} />
-        <View style={styles.boxContent} pointerEvents="none">
-          <View style={styles.valueRow}>
-            <Text style={styles.bigValue}>{liters}</Text>
-            <Text style={styles.goalValue}>/ 3.0</Text>
-          </View>
-          <Text style={styles.litrosLabel}>LITROS DIARIOS</Text>
-        </View>
-      </View>
-
-      {/* ── Quick Add ── */}
-      <View style={styles.quickAdd}>
-        <TouchableOpacity style={styles.addBtn} onPress={() => add(250)} activeOpacity={0.8}>
-          <MaterialCommunityIcons name="cup-water" size={20} color={COLORS.secondary} />
-          <Text style={styles.addBtnLabel}>+250ML</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.addBtn} onPress={() => add(500)} activeOpacity={0.8}>
-          <MaterialCommunityIcons name="water" size={20} color={COLORS.secondary} />
-          <Text style={styles.addBtnLabel}>+500ML</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.addBtn, styles.addBtnPrimary]} onPress={() => add(1000)} activeOpacity={0.8}>
-          <MaterialCommunityIcons name="cup" size={20} color="#000" />
-          <Text style={[styles.addBtnLabel, { color: '#000', fontWeight: '900' }]}>+1L</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* ── Weekly Chart ── */}
-      <View style={styles.chartCard}>
-        <View style={styles.chartHeader}>
-          <Text style={styles.chartTitle}>ÚLTIMOS 7 DÍAS</Text>
-          <View style={styles.avgBadge}>
-            <Text style={styles.avgBadgeText}>
-              PROMEDIO: {avgMl > 0 ? `${formatL(avgMl)}L` : '—'}
-            </Text>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
+        {/* ── Water Box ── */}
+        <View style={styles.waterBox}>
+          <WaterWaves progress={progress} />
+          <View style={styles.bubble1} />
+          <View style={styles.bubble2} />
+          <View style={styles.boxContent} pointerEvents="none">
+            <View style={styles.valueRow}>
+              <Text style={styles.bigValue}>{liters}</Text>
+              <Text style={styles.goalValue}>/ 3.0</Text>
+            </View>
+            <Text style={styles.litrosLabel}>LITROS DIARIOS</Text>
           </View>
         </View>
-        <View style={styles.chartBars}>
-          {weekly.map((d) => {
-            const pct = d.ml > 0 ? Math.max((d.ml / maxMl) * 100, 6) : 0;
-            return (
-              <View key={d.date} style={styles.barCol}>
-                <View style={styles.barTrack}>
-                  {pct > 0 && (
-                    <View
-                      style={[
-                        styles.barFill,
-                        { height: `${pct}%` as any },
-                        d.today ? styles.barFillToday : styles.barFillPast,
-                      ]}
-                    />
-                  )}
+
+        {/* ── Quick Add ── */}
+        <View style={styles.quickAdd}>
+          <TouchableOpacity style={styles.addBtn} onPress={() => add(250)} activeOpacity={0.8}>
+            <MaterialCommunityIcons name="cup-water" size={20} color={COLORS.secondary} />
+            <Text style={styles.addBtnLabel}>+250ML</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.addBtn} onPress={() => add(500)} activeOpacity={0.8}>
+            <MaterialCommunityIcons name="water" size={20} color={COLORS.secondary} />
+            <Text style={styles.addBtnLabel}>+500ML</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.addBtn, styles.addBtnPrimary]} onPress={() => add(1000)} activeOpacity={0.8}>
+            <MaterialCommunityIcons name="cup" size={20} color="#000" />
+            <Text style={[styles.addBtnLabel, { color: '#000', fontWeight: '900' }]}>+1L</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* ── Weekly Chart ── */}
+        <View style={styles.chartCard}>
+          <View style={styles.chartHeader}>
+            <Text style={styles.chartTitle}>ÚLTIMOS 7 DÍAS</Text>
+            <View style={styles.avgBadge}>
+              <Text style={styles.avgBadgeText}>
+                PROMEDIO: {avgMl > 0 ? `${formatL(avgMl)}L` : '—'}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.chartBars}>
+            {weekly.map((d) => {
+              const pct = d.ml > 0 ? Math.max((d.ml / maxMl) * 100, 6) : 0;
+              return (
+                <View key={d.date} style={styles.barCol}>
+                  <View style={styles.barTrack}>
+                    {pct > 0 && (
+                      <View
+                        style={[
+                          styles.barFill,
+                          { height: `${pct}%` as any },
+                          d.today ? styles.barFillToday : styles.barFillPast,
+                        ]}
+                      />
+                    )}
+                  </View>
+                  <Text style={[styles.barLabel, d.today && styles.barLabelToday]}>
+                    {d.day}
+                  </Text>
                 </View>
-                <Text style={[styles.barLabel, d.today && styles.barLabelToday]}>
-                  {d.day}
-                </Text>
-              </View>
-            );
-          })}
+              );
+            })}
+          </View>
         </View>
-      </View>
 
-      {/* ── Save Button ── */}
-      <View style={styles.footer}>
-        <TouchableOpacity
-          style={[styles.saveBtn, saving && { opacity: 0.6 }]}
-          onPress={handleSave}
-          disabled={saving}
-          activeOpacity={0.9}
-        >
-          <Text style={styles.saveBtnText}>{saving ? 'GUARDANDO...' : 'GUARDAR REGISTRO'}</Text>
-        </TouchableOpacity>
-      </View>
+        {/* ── Save Button ── */}
+        <View style={styles.footer}>
+          <TouchableOpacity
+            style={[styles.saveBtn, saving && { opacity: 0.6 }]}
+            onPress={handleSave}
+            disabled={saving}
+            activeOpacity={0.9}
+          >
+            <Text style={styles.saveBtnText}>{saving ? 'GUARDANDO...' : 'GUARDAR REGISTRO'}</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
 
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.bg, paddingHorizontal: 24 },
+  safeArea: { flex: 1, backgroundColor: COLORS.bg },
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: 24, paddingBottom: 8 },
 
   // Header: back button + title inline
   screenHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    paddingHorizontal: 24,
     paddingTop: 8,
-    marginBottom: 14,
+    paddingBottom: 20,
+    marginBottom: 4,
   },
   backBtn: {
     width: 36,
@@ -364,7 +377,7 @@ const styles = StyleSheet.create({
 
   // Chart
   chartCard: {
-    flex: 1,
+    height: Math.round(height * 0.28),
     backgroundColor: COLORS.surfaceLow, borderRadius: 14,
     padding: 16, borderWidth: 1, borderColor: 'rgba(72,72,71,0.15)',
     marginBottom: 14,
@@ -390,7 +403,7 @@ const styles = StyleSheet.create({
   barLabelToday: { color: COLORS.secondary },
 
   // Save button
-  footer: { paddingBottom: 8 },
+  footer: { paddingBottom: 4 },
   saveBtn: {
     backgroundColor: COLORS.primary, borderRadius: 14, paddingVertical: 16,
     alignItems: 'center',

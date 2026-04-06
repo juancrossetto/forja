@@ -25,20 +25,11 @@ export const ProgressStack: React.FC = () => {
         component={CargarFotosScreen}
         options={{ presentation: 'modal', headerShown: false }}
       />
-      <Stack.Group
-        screenOptions={{
-          presentation: 'modal',
-          headerShown: true,
-          headerTransparent: true,
-          headerTintColor: '#D1FF26',
-        }}
-      >
-        <Stack.Screen
-          name="PesoYMedidas"
-          component={PesoYMedidasScreen}
-          options={{ title: 'Peso y Medidas' }}
-        />
-      </Stack.Group>
+      <Stack.Screen
+        name="PesoYMedidas"
+        component={PesoYMedidasScreen}
+        options={{ presentation: 'modal', headerShown: false }}
+      />
     </Stack.Navigator>
   );
 };

@@ -8,8 +8,11 @@ import {
   Alert,
   ActivityIndicator,
   PanResponder,
+  Dimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+
+const { height: SCREEN_H } = Dimensions.get('window');
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -57,6 +60,7 @@ type Photos = Record<PhotoPosition, string | null>;
 
 const CargarFotosScreen: React.FC = () => {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const [step, setStep] = useState(0);
   const [photos, setPhotos] = useState<Photos>({ frente: null, perfil: null, espalda: null });
   const [loading, setLoading] = useState(false);
@@ -141,20 +145,17 @@ const CargarFotosScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
 
-      {/* Back button */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
-          <MaterialCommunityIcons name="arrow-left" size={24} color={COLORS.primary} />
+      {/* ── Header ── */}
+      <View style={styles.screenHeader}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+          <MaterialCommunityIcons name="arrow-left" size={18} color="#000" />
         </TouchableOpacity>
-      </View>
-
-      {/* Title */}
-      <View style={styles.titleSection}>
-        <Text style={styles.titleLine1}>CARGAR FOTOS</Text>
-        <Text style={styles.titleLine2}>DE PROGRESO</Text>
-        <Text style={styles.subtitle}>TRACKING MENTAL Y FÍSICO</Text>
+        <View style={styles.titleBlock}>
+          <Text style={styles.title}>CARGAR FOTOS DE PROGRESO</Text>
+          <Text style={styles.subtitle}>TRACKING MENTAL Y FÍSICO</Text>
+        </View>
       </View>
 
       {/* Step Tabs */}
@@ -268,7 +269,7 @@ const CargarFotosScreen: React.FC = () => {
         <Text style={styles.encryptionNote}>TUS DATOS ESTÁN ENCRIPTADOS Y SEGUROS</Text>
       </View>
 
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -277,40 +278,39 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.bg,
   },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 4,
-  },
-  headerBtn: {
-    padding: 4,
-    alignSelf: 'flex-start',
-  },
-  titleSection: {
+  screenHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     paddingHorizontal: 20,
     paddingTop: 8,
-    paddingBottom: 12,
+    paddingBottom: 20,
+    marginBottom: 4,
   },
-  titleLine1: {
-    fontFamily: 'BebasNeue_400Regular',
-    fontSize: 48,
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  titleBlock: { flex: 1 },
+  title: {
+    fontSize: 22,
+    fontWeight: '800',
     color: COLORS.text,
-    letterSpacing: 2,
-    lineHeight: 50,
-  },
-  titleLine2: {
-    fontFamily: 'BebasNeue_400Regular',
-    fontSize: 48,
-    color: COLORS.primaryDim,
-    letterSpacing: 2,
-    lineHeight: 50,
+    letterSpacing: -0.5,
+    lineHeight: 26,
   },
   subtitle: {
-    fontFamily: 'Lexend',
-    marginTop: 8,
-    fontSize: 10,
-    color: COLORS.textVariant,
-    letterSpacing: 2,
+    fontSize: 9,
+    color: '#00e3fd',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    opacity: 0.8,
+    marginTop: 1,
   },
   tabs: {
     flexDirection: 'row',
@@ -342,7 +342,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
   },
   photoArea: {
-    flex: 1,
+    height: Math.round(SCREEN_H * 0.42),
     marginHorizontal: 20,
     borderWidth: 2,
     borderStyle: 'dashed',
@@ -371,7 +371,7 @@ const styles = StyleSheet.create({
   },
   positionTitle: {
     fontFamily: 'BebasNeue_400Regular',
-    fontSize: 22,
+    fontSize: 28,
     color: COLORS.text,
     letterSpacing: 2,
     marginBottom: 10,
@@ -379,12 +379,12 @@ const styles = StyleSheet.create({
   },
   instructions: {
     fontFamily: 'Lexend',
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '400',
     color: COLORS.textVariant,
-    letterSpacing: 1.2,
+    letterSpacing: 1,
     textAlign: 'center',
-    lineHeight: 16,
+    lineHeight: 20,
   },
   infoBtn: {
     position: 'absolute',
