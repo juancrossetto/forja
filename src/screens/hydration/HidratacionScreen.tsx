@@ -12,11 +12,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
+import { useNavigation } from '@react-navigation/native';
 import {
   getHydrationForDate,
   saveHydration,
   getWeeklyHydration,
 } from '../../services/hydrationService';
+import { useUIStore } from '../../store/uiStore';
+import { formatDate, todayISO as getTodayISO } from '../../utils/dateUtils';
 
 const AnimatedSvg = Animated.createAnimatedComponent(Svg);
 
@@ -133,21 +136,36 @@ function WaterWaves({ progress }: { progress: number }) {
   );
 }
 
-const todayISO = () => new Date().toISOString().split('T')[0];
+// local alias for inline use
+const todayISO = getTodayISO;
+
+function formatL(ml: number): string {
+  return ml % 500 === 0 ? (ml / 1000).toFixed(1) : (ml / 1000).toFixed(2);
+}
 
 export default function HidratacionScreen() {
+  const navigation = useNavigation<any>();
+  // Use the date the user is viewing in HomeScreen (defaults to today)
+  const activeDate = useUIStore((s) => s.activeDate);
+  const isToday = activeDate === todayISO();
+
   const [currentMl, setCurrentMl] = useState(0);
   const [weekly, setWeekly] = useState(buildWeekDays());
   const [saving, setSaving] = useState(false);
 
-  // Load today's hydration and last 7 days on mount
+  // Load data for the active date + weekly chart. Reruns when date changes.
   useEffect(() => {
+    let cancelled = false;
+    setCurrentMl(0);
+    setWeekly(buildWeekDays());
+
     (async () => {
-      const [todayLog, weekData] = await Promise.all([
-        getHydrationForDate(todayISO()),
+      const [dayLog, weekData] = await Promise.all([
+        getHydrationForDate(activeDate),
         getWeeklyHydration(),
       ]);
-      if (todayLog) setCurrentMl(todayLog.total_ml);
+      if (cancelled) return;
+      if (dayLog) setCurrentMl(dayLog.total_ml);
       if (weekData.length > 0) {
         setWeekly((prev) =>
           prev.map((d) => {
@@ -157,7 +175,9 @@ export default function HidratacionScreen() {
         );
       }
     })();
-  }, []);
+
+    return () => { cancelled = true; };
+  }, [activeDate]);
 
   const add = (ml: number) => {
     setCurrentMl((prev) => {
@@ -172,24 +192,34 @@ export default function HidratacionScreen() {
 
   const handleSave = async () => {
     setSaving(true);
-    const ok = await saveHydration(currentMl, todayISO());
+    const ok = await saveHydration(currentMl, activeDate);
     setSaving(false);
-    const fmt = currentMl % 500 === 0 ? (currentMl / 1000).toFixed(1) : (currentMl / 1000).toFixed(2);
-    if (ok) Alert.alert('Guardado', `Registraste ${fmt}L hoy.`);
+    const dayLabel = isToday ? 'hoy' : `el ${formatDate(activeDate)}`;
+    if (ok) Alert.alert('Guardado', `Registraste ${formatL(currentMl)}L ${dayLabel}.`);
     else Alert.alert('Error', 'No se pudo guardar. Verificá tu conexión.');
   };
 
   const progress = Math.min(currentMl / GOAL_ML, 1);
-  // Smart format: 2 decimals when not a multiple of 500 (e.g. 250→"0.25", 500→"0.5", 1000→"1.0")
-  const liters = currentMl % 500 === 0
-    ? (currentMl / 1000).toFixed(1)
-    : (currentMl / 1000).toFixed(2);
+  const liters = formatL(currentMl);
   const avgMl = Math.round(weekly.filter((d) => d.ml > 0).reduce((a, b) => a + b.ml, 0) / Math.max(weekly.filter((d) => d.ml > 0).length, 1));
   const maxMl = Math.max(...weekly.map((d) => d.ml), 1);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+
+        {/* Header row with close button */}
+        <View style={styles.screenHeader}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+            <MaterialCommunityIcons name="arrow-left" size={20} color="#000" />
+          </TouchableOpacity>
+          {!isToday && (
+            <View style={styles.dateBadge}>
+              <MaterialCommunityIcons name="calendar" size={12} color={COLORS.secondary} />
+              <Text style={styles.dateBadgeText}>{formatDate(activeDate)}</Text>
+            </View>
+          )}
+        </View>
 
         <Text style={styles.title}>HIDRATACIÓN</Text>
         <Text style={styles.subtitle}>RENDIMIENTO COGNITIVO &amp; FÍSICO</Text>
@@ -229,7 +259,7 @@ export default function HidratacionScreen() {
           <View style={styles.chartHeader}>
             <Text style={styles.chartTitle}>ÚLTIMOS 7 DÍAS</Text>
             <View style={styles.avgBadge}>
-              <Text style={styles.avgBadgeText}>PROMEDIO: {(avgMl / 1000).toFixed(1)}L</Text>
+              <Text style={styles.avgBadgeText}>PROMEDIO: {formatL(avgMl)}L</Text>
             </View>
           </View>
           <View style={styles.chartBars}>
@@ -262,6 +292,38 @@ export default function HidratacionScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   scroll: { paddingHorizontal: 24, paddingTop: 12 },
+
+  screenHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dateBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(0,227,253,0.12)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(0,227,253,0.25)',
+  },
+  dateBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.secondary,
+    letterSpacing: 0.5,
+  },
 
   title: { fontSize: 52, fontWeight: '700', color: COLORS.text, letterSpacing: -1, lineHeight: 56, marginBottom: 6 },
   subtitle: { fontSize: 11, color: COLORS.secondary, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 24, opacity: 0.85 },

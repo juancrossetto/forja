@@ -62,7 +62,7 @@ export const HomeStack: React.FC = () => {
         <Stack.Screen
           name="Hidratacion"
           component={HidratacionScreen}
-          options={{ title: 'Hidratación' }}
+          options={{ headerShown: false }}
         />
       </Stack.Group>
     </Stack.Navigator>

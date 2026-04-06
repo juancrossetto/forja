@@ -20,6 +20,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
 import { useAuthStore } from '../../store/authStore';
+import { useUIStore } from '../../store/uiStore';
 import {
   getGoalsForDate,
   toggleGoal as toggleGoalApi,
@@ -102,6 +103,7 @@ function formatDateHeader(date: Date): string {
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation<Nav>();
   const user = useAuthStore((s) => s.user);
+  const setActiveDate = useUIStore((s) => s.setActiveDate);
 
   const calendarDays = useMemo(() => generateDays(), []);
   const calendarRef = useRef<FlatList>(null);
@@ -133,7 +135,9 @@ const HomeScreen: React.FC = () => {
 
   useEffect(() => {
     loadGoals(selectedDate);
-  }, [selectedDate, loadGoals]);
+    // Sync active date to global store so other screens (e.g. Hidratacion) know which day we're on
+    setActiveDate(selectedDate.toISOString().split('T')[0]);
+  }, [selectedDate, loadGoals, setActiveDate]);
 
   // Scroll to today on mount
   useEffect(() => {

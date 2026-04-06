@@ -46,17 +46,22 @@ export async function saveHydration(total_ml: number, date: string = todayISO())
   return true;
 }
 
-/** Fetch last 7 days for the chart */
+/** Fetch hydration for the last 7 calendar days (today included) */
 export async function getWeeklyHydration(): Promise<{ date: string; total_ml: number }[]> {
   const userId = await getUserId();
   if (!userId) return [];
+
+  // fromDate = 6 days ago (so we get a full 7-day window including today)
+  const from = new Date();
+  from.setDate(from.getDate() - 6);
+  const fromISO = from.toISOString().split('T')[0];
 
   const { data, error } = await supabase
     .from('hydration_logs')
     .select('date, total_ml')
     .eq('user_id', userId)
-    .order('date', { ascending: false })
-    .limit(7);
+    .gte('date', fromISO)
+    .order('date', { ascending: true });
 
   if (error) { console.error('hydration weekly:', error.message); return []; }
   return data ?? [];
