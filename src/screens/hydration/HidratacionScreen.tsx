@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   Dimensions,
   Alert,
@@ -21,11 +20,11 @@ import {
 import { useUIStore } from '../../store/uiStore';
 import { formatDate, todayISO as getTodayISO } from '../../utils/dateUtils';
 
-const AnimatedSvg = Animated.createAnimatedComponent(Svg);
+const { width, height } = Dimensions.get('window');
 
-const { width } = Dimensions.get('window');
+// Compact box: fixed height so everything fits without scrolling
 const BOX_W = width - 48;
-const BOX_H = BOX_W * 0.72;
+const BOX_H = Math.min(BOX_W * 0.54, height * 0.26);
 
 const COLORS = {
   bg: '#0e0e0e',
@@ -41,8 +40,14 @@ const COLORS = {
 };
 
 const GOAL_ML = 3000;
-
 const DAY_LABELS = ['DOM', 'LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB'];
+
+function localDateStr(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
 
 function buildWeekDays() {
   const days = [];
@@ -51,7 +56,7 @@ function buildWeekDays() {
     const d = new Date(today);
     d.setDate(today.getDate() - i);
     days.push({
-      date: d.toISOString().split('T')[0],
+      date: localDateStr(d),
       day: DAY_LABELS[d.getDay()],
       today: i === 0,
       ml: 0,
@@ -60,7 +65,6 @@ function buildWeekDays() {
   return days;
 }
 
-// Sine wave SVG path
 function wavePath(w: number, h: number, amplitude: number, freq: number, phase: number) {
   let d = `M 0 ${h}`;
   for (let x = 0; x <= w; x += 2) {
@@ -85,49 +89,31 @@ function WaterWaves({ progress }: { progress: number }) {
   }, []);
 
   const fillH = BOX_H * progress;
-  const waveH = 24;
-
-  // We'll use a simple approach: animate translateX on wider SVGs
+  const waveH = 20;
   const tx1 = phase1.interpolate({ inputRange: [0, 1], outputRange: [0, -BOX_W] });
   const tx2 = phase2.interpolate({ inputRange: [0, 1], outputRange: [-BOX_W * 0.5, BOX_W * 0.5] });
-
-  const path1 = wavePath(BOX_W * 2, waveH, 8, 2, 0);
-  const path2 = wavePath(BOX_W * 2, waveH, 6, 2.5, 1);
+  const path1 = wavePath(BOX_W * 2, waveH, 7, 2, 0);
+  const path2 = wavePath(BOX_W * 2, waveH, 5, 2.5, 1);
 
   if (fillH < 2) return null;
 
   return (
     <View style={[StyleSheet.absoluteFillObject, { justifyContent: 'flex-end' }]} pointerEvents="none">
-      {/* Solid fill */}
       <View style={{ height: fillH, backgroundColor: 'rgba(0,180,220,0.2)' }} />
-
-      {/* Wave 1 */}
-      <Animated.View
-        style={{
-          position: 'absolute',
-          bottom: fillH - waveH + 4,
-          left: 0,
-          width: BOX_W * 2,
-          height: waveH,
-          transform: [{ translateX: tx1 }],
-        }}
-      >
+      <Animated.View style={{
+        position: 'absolute', bottom: fillH - waveH + 4,
+        left: 0, width: BOX_W * 2, height: waveH,
+        transform: [{ translateX: tx1 }],
+      }}>
         <Svg width={BOX_W * 2} height={waveH}>
           <Path d={path1} fill="rgba(0,180,220,0.25)" />
         </Svg>
       </Animated.View>
-
-      {/* Wave 2 */}
-      <Animated.View
-        style={{
-          position: 'absolute',
-          bottom: fillH - waveH + 8,
-          left: 0,
-          width: BOX_W * 2,
-          height: waveH,
-          transform: [{ translateX: tx2 }],
-        }}
-      >
+      <Animated.View style={{
+        position: 'absolute', bottom: fillH - waveH + 8,
+        left: 0, width: BOX_W * 2, height: waveH,
+        transform: [{ translateX: tx2 }],
+      }}>
         <Svg width={BOX_W * 2} height={waveH}>
           <Path d={path2} fill="rgba(0,220,240,0.15)" />
         </Svg>
@@ -136,7 +122,6 @@ function WaterWaves({ progress }: { progress: number }) {
   );
 }
 
-// local alias for inline use
 const todayISO = getTodayISO;
 
 function formatL(ml: number): string {
@@ -145,7 +130,6 @@ function formatL(ml: number): string {
 
 export default function HidratacionScreen() {
   const navigation = useNavigation<any>();
-  // Use the date the user is viewing in HomeScreen (defaults to today)
   const activeDate = useUIStore((s) => s.activeDate);
   const isToday = activeDate === todayISO();
 
@@ -153,11 +137,12 @@ export default function HidratacionScreen() {
   const [weekly, setWeekly] = useState(buildWeekDays());
   const [saving, setSaving] = useState(false);
 
-  // Load data for the active date + weekly chart. Reruns when date changes.
   useEffect(() => {
     let cancelled = false;
     setCurrentMl(0);
-    setWeekly(buildWeekDays());
+
+    const freshWeek = buildWeekDays();
+    setWeekly(freshWeek);
 
     (async () => {
       const [dayLog, weekData] = await Promise.all([
@@ -165,14 +150,23 @@ export default function HidratacionScreen() {
         getWeeklyHydration(),
       ]);
       if (cancelled) return;
-      if (dayLog) setCurrentMl(dayLog.total_ml);
-      if (weekData.length > 0) {
-        setWeekly((prev) =>
-          prev.map((d) => {
-            const found = weekData.find((w) => w.date === d.date);
-            return found ? { ...d, ml: found.total_ml } : d;
-          })
+
+      // Merge DB data into week days — compute directly, no state-updater needed
+      const merged = freshWeek.map((d) => {
+        const found = weekData.find((w) => w.date === d.date);
+        return found ? { ...d, ml: found.total_ml } : d;
+      });
+
+      if (dayLog) {
+        // Override today's ml with the DB value in the merged array too
+        const todayStr = activeDate;
+        const finalMerged = merged.map((d) =>
+          d.date === todayStr ? { ...d, ml: dayLog.total_ml } : d
         );
+        setCurrentMl(dayLog.total_ml);
+        setWeekly(finalMerged);
+      } else {
+        setWeekly(merged);
       }
     })();
 
@@ -184,10 +178,10 @@ export default function HidratacionScreen() {
       const next = prev + ml;
       if (prev < GOAL_ML && next >= GOAL_ML)
         Alert.alert('¡Meta alcanzada!', 'Completaste tu objetivo diario.');
-      // Update today in weekly preview
-      setWeekly((w) => w.map((d) => d.today ? { ...d, ml: next } : d));
       return next;
     });
+    // Update today bar in chart
+    setWeekly((w) => w.map((d) => d.date === activeDate ? { ...d, ml: currentMl + ml } : d));
   };
 
   const handleSave = async () => {
@@ -195,172 +189,213 @@ export default function HidratacionScreen() {
     const ok = await saveHydration(currentMl, activeDate);
     setSaving(false);
     const dayLabel = isToday ? 'hoy' : `el ${formatDate(activeDate)}`;
-    if (ok) Alert.alert('Guardado', `Registraste ${formatL(currentMl)}L ${dayLabel}.`);
-    else Alert.alert('Error', 'No se pudo guardar. Verificá tu conexión.');
+    if (ok) {
+      // Update weekly chart with the saved value
+      setWeekly((w) => w.map((d) => d.date === activeDate ? { ...d, ml: currentMl } : d));
+      Alert.alert('Guardado', `Registraste ${formatL(currentMl)}L ${dayLabel}.`);
+    } else {
+      Alert.alert('Error', 'No se pudo guardar. Verificá tu conexión.');
+    }
   };
 
   const progress = Math.min(currentMl / GOAL_ML, 1);
   const liters = formatL(currentMl);
-  const avgMl = Math.round(weekly.filter((d) => d.ml > 0).reduce((a, b) => a + b.ml, 0) / Math.max(weekly.filter((d) => d.ml > 0).length, 1));
+  const daysWithData = weekly.filter((d) => d.ml > 0);
+  const avgMl = daysWithData.length > 0
+    ? Math.round(daysWithData.reduce((a, b) => a + b.ml, 0) / daysWithData.length)
+    : 0;
   const maxMl = Math.max(...weekly.map((d) => d.ml), 1);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
 
-        {/* Header row with close button */}
-        <View style={styles.screenHeader}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-            <MaterialCommunityIcons name="arrow-left" size={20} color="#000" />
-          </TouchableOpacity>
-          {!isToday && (
-            <View style={styles.dateBadge}>
-              <MaterialCommunityIcons name="calendar" size={12} color={COLORS.secondary} />
-              <Text style={styles.dateBadgeText}>{formatDate(activeDate)}</Text>
-            </View>
-          )}
+      {/* ── Header ── */}
+      <View style={styles.screenHeader}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+          <MaterialCommunityIcons name="arrow-left" size={18} color="#000" />
+        </TouchableOpacity>
+        <View style={styles.titleBlock}>
+          <Text style={styles.title}>HIDRATACIÓN</Text>
+          <Text style={styles.subtitle}>RENDIMIENTO COGNITIVO &amp; FÍSICO</Text>
         </View>
+        {!isToday && (
+          <View style={styles.dateBadge}>
+            <MaterialCommunityIcons name="calendar" size={11} color={COLORS.secondary} />
+            <Text style={styles.dateBadgeText}>{formatDate(activeDate)}</Text>
+          </View>
+        )}
+      </View>
 
-        <Text style={styles.title}>HIDRATACIÓN</Text>
-        <Text style={styles.subtitle}>RENDIMIENTO COGNITIVO &amp; FÍSICO</Text>
+      {/* ── Water Box ── */}
+      <View style={styles.waterBox}>
+        <WaterWaves progress={progress} />
+        <View style={styles.bubble1} />
+        <View style={styles.bubble2} />
+        <View style={styles.boxContent} pointerEvents="none">
+          <View style={styles.valueRow}>
+            <Text style={styles.bigValue}>{liters}</Text>
+            <Text style={styles.goalValue}>/ 3.0</Text>
+          </View>
+          <Text style={styles.litrosLabel}>LITROS DIARIOS</Text>
+        </View>
+      </View>
 
-        {/* Water box */}
-        <View style={styles.waterBox}>
-          <WaterWaves progress={progress} />
-          <View style={styles.bubble1} />
-          <View style={styles.bubble2} />
-          <View style={styles.boxContent} pointerEvents="none">
-            <View style={styles.valueRow}>
-              <Text style={styles.bigValue}>{liters}</Text>
-              <Text style={styles.goalValue}>/ 3.0</Text>
-            </View>
-            <Text style={styles.litrosLabel}>LITROS DIARIOS</Text>
+      {/* ── Quick Add ── */}
+      <View style={styles.quickAdd}>
+        <TouchableOpacity style={styles.addBtn} onPress={() => add(250)} activeOpacity={0.8}>
+          <MaterialCommunityIcons name="cup-water" size={20} color={COLORS.secondary} />
+          <Text style={styles.addBtnLabel}>+250ML</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.addBtn} onPress={() => add(500)} activeOpacity={0.8}>
+          <MaterialCommunityIcons name="water" size={20} color={COLORS.secondary} />
+          <Text style={styles.addBtnLabel}>+500ML</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.addBtn, styles.addBtnPrimary]} onPress={() => add(1000)} activeOpacity={0.8}>
+          <MaterialCommunityIcons name="cup" size={20} color="#000" />
+          <Text style={[styles.addBtnLabel, { color: '#000', fontWeight: '900' }]}>+1L</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* ── Weekly Chart ── */}
+      <View style={styles.chartCard}>
+        <View style={styles.chartHeader}>
+          <Text style={styles.chartTitle}>ÚLTIMOS 7 DÍAS</Text>
+          <View style={styles.avgBadge}>
+            <Text style={styles.avgBadgeText}>
+              PROMEDIO: {avgMl > 0 ? `${formatL(avgMl)}L` : '—'}
+            </Text>
           </View>
         </View>
-
-        {/* Quick Add */}
-        <View style={styles.quickAdd}>
-          <TouchableOpacity style={styles.addBtn} onPress={() => add(250)} activeOpacity={0.8}>
-            <MaterialCommunityIcons name="cup-water" size={24} color={COLORS.secondary} />
-            <Text style={styles.addBtnLabel}>+250ML</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.addBtn} onPress={() => add(500)} activeOpacity={0.8}>
-            <MaterialCommunityIcons name="water" size={24} color={COLORS.secondary} />
-            <Text style={styles.addBtnLabel}>+500ML</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.addBtn, styles.addBtnPrimary]} onPress={() => add(1000)} activeOpacity={0.8}>
-            <MaterialCommunityIcons name="cup" size={24} color="#000" />
-            <Text style={[styles.addBtnLabel, { color: '#000', fontWeight: '900' }]}>+1L</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Weekly Chart */}
-        <View style={styles.chartCard}>
-          <View style={styles.chartHeader}>
-            <Text style={styles.chartTitle}>ÚLTIMOS 7 DÍAS</Text>
-            <View style={styles.avgBadge}>
-              <Text style={styles.avgBadgeText}>PROMEDIO: {formatL(avgMl)}L</Text>
-            </View>
-          </View>
-          <View style={styles.chartBars}>
-            {weekly.map((d) => {
-              const pct = maxMl > 0 ? (d.ml / maxMl) * 100 : 0;
-              return (
-                <View key={d.date} style={styles.barCol}>
-                  <View style={styles.barTrack}>
-                    <View style={[styles.barFill, { height: `${pct}%` as any }, d.today && styles.barFillToday]} />
-                  </View>
-                  <Text style={[styles.barLabel, d.today && styles.barLabelToday]}>{d.day}</Text>
+        <View style={styles.chartBars}>
+          {weekly.map((d) => {
+            const pct = d.ml > 0 ? Math.max((d.ml / maxMl) * 100, 6) : 0;
+            return (
+              <View key={d.date} style={styles.barCol}>
+                <View style={styles.barTrack}>
+                  {pct > 0 && (
+                    <View
+                      style={[
+                        styles.barFill,
+                        { height: `${pct}%` as any },
+                        d.today ? styles.barFillToday : styles.barFillPast,
+                      ]}
+                    />
+                  )}
                 </View>
-              );
-            })}
-          </View>
+                <Text style={[styles.barLabel, d.today && styles.barLabelToday]}>
+                  {d.day}
+                </Text>
+              </View>
+            );
+          })}
         </View>
+      </View>
 
-        <View style={{ height: 110 }} />
-      </ScrollView>
-
+      {/* ── Save Button ── */}
       <View style={styles.footer}>
-        <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving} activeOpacity={0.9}>
+        <TouchableOpacity
+          style={[styles.saveBtn, saving && { opacity: 0.6 }]}
+          onPress={handleSave}
+          disabled={saving}
+          activeOpacity={0.9}
+        >
           <Text style={styles.saveBtnText}>{saving ? 'GUARDANDO...' : 'GUARDAR REGISTRO'}</Text>
         </TouchableOpacity>
       </View>
+
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.bg },
-  scroll: { paddingHorizontal: 24, paddingTop: 12 },
+  container: { flex: 1, backgroundColor: COLORS.bg, paddingHorizontal: 24 },
 
+  // Header: back button + title inline
   screenHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20,
+    gap: 12,
+    paddingTop: 8,
+    marginBottom: 14,
   },
   backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
+    flexShrink: 0,
   },
+  titleBlock: { flex: 1 },
+  title: { fontSize: 22, fontWeight: '800', color: COLORS.text, letterSpacing: -0.5, lineHeight: 26 },
+  subtitle: { fontSize: 9, color: COLORS.secondary, letterSpacing: 1.5, textTransform: 'uppercase', opacity: 0.8, marginTop: 1 },
   dateBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(0,227,253,0.12)',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(0,227,253,0.25)',
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: 'rgba(0,227,253,0.12)', borderRadius: 7,
+    paddingHorizontal: 8, paddingVertical: 5,
+    borderWidth: 1, borderColor: 'rgba(0,227,253,0.25)',
   },
-  dateBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.secondary,
-    letterSpacing: 0.5,
-  },
+  dateBadgeText: { fontSize: 10, fontWeight: '700', color: COLORS.secondary, letterSpacing: 0.4 },
 
-  title: { fontSize: 52, fontWeight: '700', color: COLORS.text, letterSpacing: -1, lineHeight: 56, marginBottom: 6 },
-  subtitle: { fontSize: 11, color: COLORS.secondary, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 24, opacity: 0.85 },
-
+  // Water box
   waterBox: {
-    width: BOX_W, height: BOX_H, borderRadius: 20,
+    width: BOX_W, height: BOX_H, borderRadius: 18,
     backgroundColor: COLORS.surface, overflow: 'hidden',
-    marginBottom: 24, justifyContent: 'center', alignItems: 'center',
+    marginBottom: 14, justifyContent: 'center', alignItems: 'center',
+    alignSelf: 'center',
   },
   boxContent: { alignItems: 'center', zIndex: 2 },
-  valueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
-  bigValue: { fontSize: 80, fontWeight: '900', color: COLORS.text, lineHeight: 88 },
-  goalValue: { fontSize: 28, fontWeight: '500', color: COLORS.textVariant },
-  litrosLabel: { fontSize: 12, color: COLORS.secondary, letterSpacing: 4, textTransform: 'uppercase', marginTop: 4 },
+  valueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
+  bigValue: { fontSize: 60, fontWeight: '900', color: COLORS.text, lineHeight: 68 },
+  goalValue: { fontSize: 22, fontWeight: '500', color: COLORS.textVariant },
+  litrosLabel: { fontSize: 10, color: COLORS.secondary, letterSpacing: 3, textTransform: 'uppercase', marginTop: 2 },
+  bubble1: { position: 'absolute', top: '25%', left: '22%', width: 8, height: 8, borderRadius: 4, backgroundColor: 'rgba(0,227,253,0.4)' },
+  bubble2: { position: 'absolute', top: '40%', left: '35%', width: 4, height: 4, borderRadius: 2, backgroundColor: 'rgba(0,227,253,0.6)' },
 
-  bubble1: { position: 'absolute', top: '25%', left: '22%', width: 10, height: 10, borderRadius: 5, backgroundColor: 'rgba(0,227,253,0.4)' },
-  bubble2: { position: 'absolute', top: '38%', left: '35%', width: 5, height: 5, borderRadius: 3, backgroundColor: 'rgba(0,227,253,0.6)' },
-
-  quickAdd: { flexDirection: 'row', gap: 12, marginBottom: 24 },
-  addBtn: { flex: 1, backgroundColor: COLORS.surfaceHighest, borderRadius: 14, paddingVertical: 18, alignItems: 'center', gap: 8 },
+  // Quick add buttons
+  quickAdd: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  addBtn: {
+    flex: 1, backgroundColor: COLORS.surfaceHighest, borderRadius: 12,
+    paddingVertical: 14, alignItems: 'center', gap: 6,
+  },
   addBtnPrimary: { backgroundColor: COLORS.primaryContainer },
-  addBtnLabel: { fontSize: 10, fontWeight: '700', color: COLORS.textVariant, letterSpacing: 1, textTransform: 'uppercase' },
+  addBtnLabel: { fontSize: 9, fontWeight: '700', color: COLORS.textVariant, letterSpacing: 1, textTransform: 'uppercase' },
 
-  chartCard: { backgroundColor: COLORS.surfaceLow, borderRadius: 16, padding: 24, borderWidth: 1, borderColor: 'rgba(72,72,71,0.15)' },
-  chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  chartTitle: { fontSize: 16, fontWeight: '700', color: COLORS.text, letterSpacing: 0.5 },
-  avgBadge: { backgroundColor: 'rgba(0,104,117,0.3)', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
-  avgBadgeText: { fontSize: 10, color: COLORS.secondary, letterSpacing: 0.5 },
-  chartBars: { flexDirection: 'row', alignItems: 'flex-end', height: 120, gap: 8 },
-  barCol: { flex: 1, height: '100%', alignItems: 'center', gap: 6 },
-  barTrack: { flex: 1, width: '100%', backgroundColor: COLORS.surfaceHighest, borderRadius: 4, justifyContent: 'flex-end', overflow: 'hidden' },
-  barFill: { width: '100%', backgroundColor: COLORS.surfaceHighest, borderRadius: 4 },
+  // Chart
+  chartCard: {
+    flex: 1,
+    backgroundColor: COLORS.surfaceLow, borderRadius: 14,
+    padding: 16, borderWidth: 1, borderColor: 'rgba(72,72,71,0.15)',
+    marginBottom: 14,
+  },
+  chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  chartTitle: { fontSize: 13, fontWeight: '700', color: COLORS.text, letterSpacing: 0.5 },
+  avgBadge: { backgroundColor: 'rgba(0,104,117,0.3)', borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3 },
+  avgBadgeText: { fontSize: 9, color: COLORS.secondary, letterSpacing: 0.5 },
+
+  chartBars: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
+  barCol: { flex: 1, height: '100%', alignItems: 'center', gap: 5 },
+  barTrack: {
+    flex: 1, width: '100%',
+    backgroundColor: COLORS.surfaceHighest,
+    borderRadius: 4, justifyContent: 'flex-end', overflow: 'hidden',
+  },
+  barFill: { width: '100%', borderRadius: 4 },
+  // Past days: muted primary tint so they're visible but not dominant
+  barFillPast: { backgroundColor: 'rgba(209,255,38,0.4)' },
+  // Today: bright secondary
   barFillToday: { backgroundColor: COLORS.secondaryDim },
   barLabel: { fontSize: 8, fontWeight: '700', color: COLORS.textVariant, letterSpacing: 0.5, textTransform: 'uppercase' },
   barLabelToday: { color: COLORS.secondary },
 
-  footer: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 24, paddingBottom: 32, paddingTop: 12 },
-  saveBtn: { backgroundColor: COLORS.primary, borderRadius: 16, paddingVertical: 18, alignItems: 'center', shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 24, elevation: 8 },
-  saveBtnText: { fontSize: 16, fontWeight: '700', color: '#000', letterSpacing: 2, textTransform: 'uppercase' },
+  // Save button
+  footer: { paddingBottom: 8 },
+  saveBtn: {
+    backgroundColor: COLORS.primary, borderRadius: 14, paddingVertical: 16,
+    alignItems: 'center',
+    shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3, shadowRadius: 16, elevation: 8,
+  },
+  saveBtnText: { fontSize: 15, fontWeight: '700', color: '#000', letterSpacing: 2, textTransform: 'uppercase' },
 });
