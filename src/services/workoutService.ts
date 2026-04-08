@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { syncTrainingGoal } from './goalProgressService';
 
 export interface WorkoutLog {
   id: string;
@@ -47,6 +48,10 @@ export async function saveWorkoutLog(payload: {
   });
 
   if (error) { console.error('workout save:', error.message); return false; }
+
+  // Sync goal progress (non-blocking)
+  syncTrainingGoal(date).catch(() => {});
+
   return true;
 }
 

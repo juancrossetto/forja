@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { todayISO } from '../utils/dateUtils';
+import { syncMealsGoal } from './goalProgressService';
 
 export type MealType = 'DES' | 'ALM' | 'MER' | 'CEN';
 
@@ -72,6 +73,10 @@ export async function saveMealLog(payload: {
   });
 
   if (error) { console.error('meal save:', error.message); return false; }
+
+  // Sync goal progress (non-blocking)
+  syncMealsGoal(payload.date ?? todayISO()).catch(() => {});
+
   return true;
 }
 

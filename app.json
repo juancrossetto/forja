@@ -38,7 +38,12 @@
       ],
       "expo-camera",
       "expo-web-browser",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#D1FF26"
+        }
     ]
   }
 }

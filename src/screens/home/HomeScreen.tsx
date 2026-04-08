@@ -28,6 +28,9 @@ import {
   type DailyGoal,
 } from '../../services/goalsService';
 import { getProfile } from '../../services/profileService';
+import { syncAllGoalsForDate } from '../../services/goalProgressService';
+import { registerForPushNotifications } from '../../services/pushNotificationService';
+import { startStepTracking, stopStepTracking, syncStepsToGoal } from '../../services/stepCounterService';
 
 type Nav = NativeStackNavigationProp<HomeStackParamList>;
 
@@ -102,6 +105,30 @@ function formatDateHeader(date: Date): string {
   return `${date.getDate()} de ${MONTHS[date.getMonth()]}`;
 }
 
+// ── Progress label for auto-tracked goals ──
+function goalProgressLabel(goal: DailyGoal): string | null {
+  if (!goal.auto_track || goal.target_unit === 'boolean') return null;
+  const cur = goal.current_value ?? 0;
+  const tgt = goal.target_value ?? 1;
+  switch (goal.target_unit) {
+    case 'ml':
+      return `${(cur / 1000).toFixed(1)}L / ${(tgt / 1000).toFixed(1)}L`;
+    case 'steps':
+      return `${cur.toLocaleString()} / ${tgt.toLocaleString()}`;
+    case 'minutes':
+      return `${Math.round(cur)} / ${Math.round(tgt)} min`;
+    case 'meals':
+      return `${Math.round(cur)} / ${Math.round(tgt)}`;
+    default:
+      return null;
+  }
+}
+
+function goalProgressPct(goal: DailyGoal): number {
+  if (!goal.auto_track || !goal.target_value) return 0;
+  return Math.min((goal.current_value ?? 0) / goal.target_value, 1);
+}
+
 // ── Animated Goal Item ──────────────────────────────────────────────────────
 const GoalItem = React.memo(({ goal, onToggle }: { goal: DailyGoal; onToggle: (g: DailyGoal) => void }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -128,13 +155,26 @@ const GoalItem = React.memo(({ goal, onToggle }: { goal: DailyGoal; onToggle: (g
     outputRange: ['rgba(209,255,38,0)', 'rgba(209,255,38,0.06)'],
   });
 
+  const progress = goalProgressLabel(goal);
+  const pct = goalProgressPct(goal);
+
   return (
     <TouchableOpacity onPress={handlePress} activeOpacity={0.8}>
       <Animated.View style={[styles.goalItem, { backgroundColor: bgColor }]}>
         <Animated.View style={[styles.goalCheckbox, goal.completed && styles.goalCheckboxCompleted, { transform: [{ scale: scaleAnim }] }]}>
           {goal.completed && <MaterialCommunityIcons name="check" size={13} color="#000" />}
         </Animated.View>
-        <Text style={[styles.goalText, goal.completed && styles.goalTextCompleted]}>{goal.text}</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.goalText, goal.completed && styles.goalTextCompleted]}>{goal.text}</Text>
+          {progress && (
+            <View style={styles.goalProgressRow}>
+              <View style={styles.goalProgressBarBgSmall}>
+                <View style={[styles.goalProgressBarFillSmall, { width: `${Math.round(pct * 100)}%` }]} />
+              </View>
+              <Text style={styles.goalProgressLabel}>{progress}</Text>
+            </View>
+          )}
+        </View>
         {goal.completed && (
           <MaterialCommunityIcons name="check-circle" size={16} color={COLORS.primary} style={{ opacity: 0.55 }} />
         )}
@@ -166,12 +206,22 @@ const HomeScreen: React.FC = () => {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [pickerDate, setPickerDate] = useState(new Date());
 
-  // Load goals when date changes
+  // Load goals when date changes — also sync progress from tracked sources
   const loadGoals = useCallback(async (date: Date) => {
     setGoalsLoading(true);
     try {
+      const dateStr = date.toISOString().split('T')[0];
+      // Ensure goals exist first, then sync real-time progress
       const data = await getGoalsForDate(date);
       setGoals(data);
+      // Sync progress from hydration/meals/training in background, then refresh
+      syncAllGoalsForDate(dateStr).then(() => {
+        getGoalsForDate(date).then(setGoals);
+      }).catch(() => {});
+      // Also sync steps for today
+      if (isSameDay(date, new Date())) {
+        syncStepsToGoal().catch(() => {});
+      }
     } catch (e) {
       console.error('Error loading goals:', e);
     } finally {
@@ -188,6 +238,13 @@ const HomeScreen: React.FC = () => {
   // Load avatar from profile
   useEffect(() => {
     getProfile().then((p) => { if (p?.avatar_url) setAvatarUrl(p.avatar_url); });
+  }, []);
+
+  // One-time init: push notifications + step tracking
+  useEffect(() => {
+    registerForPushNotifications().catch(() => {});
+    startStepTracking().catch(() => {});
+    return () => { stopStepTracking(); };
   }, []);
 
   // Scroll to today on mount
@@ -991,12 +1048,36 @@ const styles = StyleSheet.create({
   goalText: {
     fontSize: 13,
     color: COLORS.textPrimary,
-    flex: 1,
     fontWeight: '500',
   },
   goalTextCompleted: {
     textDecorationLine: 'line-through',
     color: COLORS.textTertiary,
+  },
+  goalProgressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 5,
+  },
+  goalProgressBarBgSmall: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    overflow: 'hidden',
+  },
+  goalProgressBarFillSmall: {
+    height: '100%',
+    borderRadius: 2,
+    backgroundColor: COLORS.primary,
+  },
+  goalProgressLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: COLORS.textTertiary,
+    minWidth: 75,
+    textAlign: 'right',
   },
   calendarButton: {
     width: 36,

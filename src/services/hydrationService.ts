@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { syncHydrationGoal } from './goalProgressService';
 
 export interface HydrationLog {
   id: string;
@@ -43,6 +44,10 @@ export async function saveHydration(total_ml: number, date: string = todayISO())
     .upsert({ user_id: userId, date, total_ml, goal_ml: 3000 }, { onConflict: 'user_id,date' });
 
   if (error) { console.error('hydration save:', error.message); return false; }
+
+  // Sync goal progress (non-blocking)
+  syncHydrationGoal(total_ml, date).catch(() => {});
+
   return true;
 }
 
