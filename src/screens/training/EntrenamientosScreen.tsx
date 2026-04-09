@@ -24,6 +24,7 @@ const colors = {
 
 interface DayCard {
   id: string;
+  workoutId: string | null; // matches trainingStore workout ids
   day: number;
   dayName: string;
   title: string;
@@ -33,74 +34,20 @@ interface DayCard {
 }
 
 const WORKOUT_DAYS: DayCard[] = [
-  {
-    id: '1',
-    day: 1,
-    dayName: 'Lunes',
-    title: 'Empuje Horizontal',
-    duration: 75,
-    intensity: 'Alta Intensidad',
-    type: 'active',
-  },
-  {
-    id: '2',
-    day: 2,
-    dayName: 'Martes',
-    title: 'Tracción Vertical',
-    duration: 60,
-    intensity: 'Moderada',
-    type: 'normal',
-  },
-  {
-    id: '3',
-    day: 3,
-    dayName: 'Miércoles',
-    title: 'Descanso Activo',
-    duration: 30,
-    intensity: 'Movilidad',
-    type: 'rest',
-  },
-  {
-    id: '4',
-    day: 4,
-    dayName: 'Jueves',
-    title: 'Tren Inferior',
-    duration: 80,
-    intensity: 'Max Esfuerzo',
-    type: 'normal',
-  },
-  {
-    id: '5',
-    day: 5,
-    dayName: 'Viernes',
-    title: 'Full Body Flow',
-    duration: 65,
-    intensity: 'Moderada',
-    type: 'normal',
-  },
-  {
-    id: '6',
-    day: 6,
-    dayName: 'Sábado',
-    title: 'LISS & Recovery',
-    duration: 45,
-    intensity: 'Baja',
-    type: 'normal',
-  },
-  {
-    id: '7',
-    day: 7,
-    dayName: 'Domingo',
-    title: 'Rest Day',
-    duration: 0,
-    intensity: 'Descanso',
-    type: 'rest',
-  },
+  { id: '1', workoutId: 'wk_001', day: 1, dayName: 'Lunes',     title: 'Empuje Horizontal',  duration: 75, intensity: 'Alta Intensidad', type: 'active' },
+  { id: '2', workoutId: 'wk_004', day: 2, dayName: 'Martes',    title: 'Tracción Vertical',  duration: 60, intensity: 'Moderada',        type: 'normal' },
+  { id: '3', workoutId: null,     day: 3, dayName: 'Miércoles', title: 'Descanso Activo',     duration: 30, intensity: 'Movilidad',       type: 'rest'   },
+  { id: '4', workoutId: 'wk_003', day: 4, dayName: 'Jueves',    title: 'Tren Inferior',       duration: 80, intensity: 'Max Esfuerzo',   type: 'normal' },
+  { id: '5', workoutId: 'wk_002', day: 5, dayName: 'Viernes',   title: 'Full Body Flow',      duration: 65, intensity: 'Moderada',       type: 'normal' },
+  { id: '6', workoutId: 'wk_004', day: 6, dayName: 'Sábado',    title: 'LISS & Recovery',     duration: 45, intensity: 'Baja',           type: 'normal' },
+  { id: '7', workoutId: null,     day: 7, dayName: 'Domingo',   title: 'Rest Day',             duration: 0,  intensity: 'Descanso',      type: 'rest'   },
 ];
 
-export const EntrenamientosScreen: React.FC = () => {
-  const [selectedDay, setSelectedDay] = useState(WORKOUT_DAYS[0]);
+interface Props {
+  navigation: any;
+}
 
+export const EntrenamientosScreen: React.FC<Props> = ({ navigation }) => {
   const renderDayCard = ({ item }: { item: DayCard }) => {
     const isActive = item.type === 'active';
     const isRest = item.type === 'rest';
@@ -160,19 +107,16 @@ export const EntrenamientosScreen: React.FC = () => {
 
           {!isRest ? (
             <TouchableOpacity
-              style={[
-                styles.dayButton,
-                isActive && styles.dayButtonActive,
-              ]}
-              onPress={() => setSelectedDay(item)}
+              style={[styles.dayButton, isActive && styles.dayButtonActive]}
+              onPress={() =>
+                navigation.navigate('DetalleEntrenamiento', {
+                  trainingId: item.workoutId ?? item.id,
+                  trainingName: item.title,
+                })
+              }
               activeOpacity={0.8}
             >
-              <Text
-                style={[
-                  styles.dayButtonText,
-                  isActive && styles.dayButtonTextActive,
-                ]}
-              >
+              <Text style={[styles.dayButtonText, isActive && styles.dayButtonTextActive]}>
                 {isActive ? 'Iniciar' : 'Ver Rutina'}
               </Text>
             </TouchableOpacity>

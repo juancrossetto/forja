@@ -87,6 +87,134 @@ export async function getWorkoutsForDate(date: string = todayISO()): Promise<Wor
   return data ?? [];
 }
 
+// ── ACTIVE SESSION ────────────────────────────────────────────────────────────
+
+export interface ActiveSessionRecord {
+  id: string;
+  workout_name: string;
+  workout_type: string | null;
+  elapsed_seconds: number;
+  completed_exercises: string[];
+  created_at: string;
+}
+
+/**
+ * Insert a new in-progress session (completed = false).
+ * Returns the Supabase row id, or null on failure.
+ */
+export async function startActiveSession(params: {
+  workout_name: string;
+  workout_type?: string;
+}): Promise<string | null> {
+  const userId = await getUserId();
+  if (!userId) return null;
+
+  const { data, error } = await supabase
+    .from('workout_logs')
+    .insert({
+      user_id: userId,
+      date: todayISO(),
+      workout_name: params.workout_name,
+      workout_type: params.workout_type ?? null,
+      completed: false,
+      elapsed_seconds: 0,
+      completed_exercises: [],
+    })
+    .select('id')
+    .single();
+
+  if (error) { console.error('startActiveSession:', error.message); return null; }
+  return data?.id ?? null;
+}
+
+/**
+ * Periodically checkpoint elapsed time and completed exercise ids.
+ * Called every 30 s by the live screen and on each exercise completion.
+ */
+export async function updateActiveSession(
+  id: string,
+  elapsed_seconds: number,
+  completed_exercises: string[]
+): Promise<void> {
+  const { error } = await supabase
+    .from('workout_logs')
+    .update({ elapsed_seconds, completed_exercises })
+    .eq('id', id);
+
+  if (error) console.error('updateActiveSession:', error.message);
+}
+
+/**
+ * Fetch the latest incomplete session for the current user.
+ * Returns null if none exists or on error.
+ */
+export async function getActiveSession(): Promise<ActiveSessionRecord | null> {
+  const userId = await getUserId();
+  if (!userId) return null;
+
+  const { data, error } = await supabase
+    .from('workout_logs')
+    .select('id, workout_name, workout_type, elapsed_seconds, completed_exercises, created_at')
+    .eq('user_id', userId)
+    .eq('completed', false)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return {
+    ...data,
+    completed_exercises: (data.completed_exercises as string[]) ?? [],
+  };
+}
+
+/**
+ * Mark an active session as completed with final stats (single DB write for that row).
+ */
+export async function finishActiveSession(
+  id: string,
+  params: {
+    duration_min: number;
+    rpe?: number | null;
+    comments?: string | null;
+    elapsed_seconds?: number;
+    completed_exercises?: string[];
+  },
+): Promise<boolean> {
+  const payload: Record<string, unknown> = {
+    completed: true,
+    duration_min: params.duration_min,
+    rpe: params.rpe ?? null,
+    comments: params.comments ?? null,
+  };
+  if (params.elapsed_seconds != null) {
+    payload.elapsed_seconds = params.elapsed_seconds;
+  }
+  if (params.completed_exercises != null) {
+    payload.completed_exercises = params.completed_exercises;
+  }
+
+  const { error } = await supabase.from('workout_logs').update(payload).eq('id', id);
+
+  if (error) {
+    console.error('finishActiveSession:', error.message);
+    return false;
+  }
+
+  syncTrainingGoal(todayISO()).catch(() => {});
+  return true;
+}
+
+/**
+ * Delete an abandoned session so it does not resurface on restart.
+ */
+export async function cancelActiveSession(id: string): Promise<void> {
+  const { error } = await supabase.from('workout_logs').delete().eq('id', id);
+  if (error) console.error('cancelActiveSession:', error.message);
+}
+
+// ── HISTORY ───────────────────────────────────────────────────────────────────
+
 /** Count workouts completed in current week (Mon–Sun). */
 export async function getWeeklyWorkoutCount(): Promise<number> {
   const userId = await getUserId();

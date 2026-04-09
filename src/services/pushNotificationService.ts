@@ -64,7 +64,13 @@ export async function registerForPushNotifications(): Promise<string | null> {
 
   // Get the Expo push token
   try {
-    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+    const projectId = getExpoProjectId();
+    if (!projectId) {
+      console.warn(
+        'Push notifications disabled: missing EAS projectId. Configure expo.extra.eas.projectId in app config.',
+      );
+      return null;
+    }
     const tokenData = await Notifications.getExpoPushTokenAsync({
       projectId,
     });
@@ -124,7 +130,10 @@ export function addNotificationResponseListener(
  */
 export async function unregisterPushToken(): Promise<void> {
   try {
-    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+    const projectId = getExpoProjectId();
+    if (!projectId) {
+      return;
+    }
     const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
     const token = tokenData.data;
 
@@ -165,4 +174,11 @@ async function saveTokenToDatabase(token: string): Promise<void> {
   if (error) {
     console.error('Error saving push token:', error.message);
   }
+}
+
+function getExpoProjectId(): string | undefined {
+  const projectIdFromExpoConfig = Constants.expoConfig?.extra?.eas?.projectId;
+  const projectIdFromEasConfig = Constants.easConfig?.projectId;
+
+  return projectIdFromExpoConfig ?? projectIdFromEasConfig;
 }

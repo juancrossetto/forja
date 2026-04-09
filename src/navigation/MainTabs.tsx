@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Modal } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import type { MainTabParamList } from './types';
 
 import HomeStack from './HomeStack';
@@ -10,6 +10,8 @@ import NutritionStack from './NutritionStack';
 import ProgressStack from './ProgressStack';
 import CustomTabBar from './CustomTabBar';
 import { AddMenuOverlay } from '../screens/home/AddMenuOverlay';
+import { ActiveWorkoutBanner } from '../components/ActiveWorkoutBanner';
+import { WorkoutLiveTimer } from '../components/WorkoutLiveTimer';
 
 // Empty placeholder screen for the Add tab (the actual UI is a modal)
 const EmptyScreen = () => null;
@@ -52,7 +54,14 @@ export const MainTabs: React.FC = () => {
         <Tab.Screen
           name="TrainingStack"
           component={TrainingStack}
-          options={{ title: 'Entreno' }}
+          options={({ route }) => {
+            const screen = getFocusedRouteNameFromRoute(route);
+            const hideTabBar = screen === 'EntrenamientoEnVivo' || screen === 'ResumenEntrenamiento';
+            return {
+              title: 'Entreno',
+              tabBarStyle: hideTabBar ? { display: 'none' } : undefined,
+            };
+          }}
         />
         <Tab.Screen
           name="AddMenu"
@@ -76,6 +85,9 @@ export const MainTabs: React.FC = () => {
           options={{ title: 'Progreso' }}
         />
       </Tab.Navigator>
+
+      <WorkoutLiveTimer />
+      <ActiveWorkoutBanner />
 
       <Modal
         visible={addMenuVisible}

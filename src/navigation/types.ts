@@ -20,9 +20,13 @@ export type TrainingStackParamList = {
   ResumenEntrenamiento: {
     trainingId: string;
     trainingName: string;
-    duration: number;
+    durationSeconds: number;
     calories: number;
     exercises: number;
+    /** Row created by startActiveSession; final persist updates this row once. */
+    sessionLogId?: string | null;
+    completedExerciseIds?: string[];
+    workoutType?: string | null;
   };
 };
 

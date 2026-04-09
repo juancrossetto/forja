@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,12 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRoute, useNavigation } from '@react-navigation/native';
-import { saveWorkoutLog } from '../../services/workoutService';
+import { finishActiveSession, saveWorkoutLog } from '../../services/workoutService';
+
+const PERSIST_DELAY_MS = 2000;
 
 const colors = {
   bg: '#0e0e0e',
@@ -29,32 +30,75 @@ export const ResumenEntrenamientoScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const {
     trainingName = 'Entrenamiento',
-    duration = 0,
+    durationSeconds = 0,
     calories = 0,
+    exercises = 0,
+    sessionLogId = null,
+    completedExerciseIds = [] as string[],
+    workoutType = null as string | null,
   } = route.params ?? {};
+
+  const totalSec = Math.max(0, Math.floor(durationSeconds));
+  const durationMinutes = Math.floor(totalSec / 60);
+  const durationSecsRemainder = totalSec % 60;
+  const durationMinForDb =
+    totalSec > 0 ? Math.max(1, Math.round(totalSec / 60)) : 0;
 
   const [selectedRPE, setSelectedRPE] = useState<number>(5);
   const [comments, setComments] = useState<string>('');
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [persistStatus, setPersistStatus] = useState<
+    'idle' | 'saving' | 'done' | 'error'
+  >('idle');
 
-  const handleSave = async () => {
-    if (saving || saved) return;
-    setSaving(true);
-    const ok = await saveWorkoutLog({
-      workout_name: trainingName,
-      duration_min: duration > 0 ? Math.round(duration / 60) : null,
-      rpe: selectedRPE,
-      comments: comments.trim() || null,
-    });
-    setSaving(false);
-    if (ok) {
-      setSaved(true);
-      Alert.alert('¡Guardado!', 'Tu entrenamiento fue registrado correctamente.');
-    } else {
-      Alert.alert('Error', 'No se pudo guardar. Verificá tu conexión.');
-    }
-  };
+  const rpeRef = useRef(selectedRPE);
+  const commentsRef = useRef(comments);
+  rpeRef.current = selectedRPE;
+  commentsRef.current = comments;
+
+  const completedKey = completedExerciseIds.join(',');
+
+  useEffect(() => {
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      if (cancelled) return;
+      setPersistStatus('saving');
+
+      const rpe = rpeRef.current;
+      const c = commentsRef.current.trim() || null;
+
+      if (sessionLogId) {
+        const ok = await finishActiveSession(sessionLogId, {
+          duration_min: durationMinForDb,
+          rpe,
+          comments: c,
+          elapsed_seconds: totalSec,
+          completed_exercises: completedExerciseIds,
+        });
+        if (!cancelled) setPersistStatus(ok ? 'done' : 'error');
+      } else {
+        const ok = await saveWorkoutLog({
+          workout_name: trainingName,
+          workout_type: workoutType ?? undefined,
+          duration_min: durationMinForDb > 0 ? durationMinForDb : null,
+          rpe,
+          comments: c,
+        });
+        if (!cancelled) setPersistStatus(ok ? 'done' : 'error');
+      }
+    }, PERSIST_DELAY_MS);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [
+    sessionLogId,
+    totalSec,
+    durationMinForDb,
+    trainingName,
+    workoutType,
+    completedKey,
+  ]);
 
   return (
     <View style={styles.container}>
@@ -82,7 +126,10 @@ export const ResumenEntrenamientoScreen: React.FC = () => {
               <View>
                 <Text style={styles.metricLabel}>Duración Total</Text>
                 <Text style={styles.metricValueLarge}>
-                  {duration > 0 ? Math.round(duration / 60) : 54}<Text style={styles.metricUnit}>min</Text>
+                  {durationMinutes}
+                  <Text style={styles.metricUnit}> min </Text>
+                  {String(durationSecsRemainder).padStart(2, '0')}
+                  <Text style={styles.metricUnit}> seg</Text>
                 </Text>
               </View>
               <Text style={styles.metricIcon}>⏱</Text>
@@ -93,11 +140,11 @@ export const ResumenEntrenamientoScreen: React.FC = () => {
           <View style={[styles.metricCard, styles.calorieCard]}>
             <Text style={styles.metricLabel}>Calorías (Smartwatch)</Text>
             <Text style={styles.metricValue}>
-              482<Text style={styles.metricUnitSmall}>kcal</Text>
+              {calories > 0 ? calories : '—'}<Text style={styles.metricUnitSmall}>{calories > 0 ? 'kcal' : ''}</Text>
             </Text>
             <View style={styles.syncBadge}>
               <Text style={styles.syncIcon}>⌚</Text>
-              <Text style={styles.syncText}>Sincronizado</Text>
+              <Text style={styles.syncText}>{calories > 0 ? 'Estimado' : 'Sin datos'}</Text>
             </View>
           </View>
 
@@ -187,17 +234,17 @@ export const ResumenEntrenamientoScreen: React.FC = () => {
 
         {/* Action Buttons */}
         <View style={styles.buttonsSection}>
-          <TouchableOpacity
-            style={[styles.primaryButton, (saving || saved) && { opacity: 0.7 }]}
-            activeOpacity={0.85}
-            onPress={handleSave}
-            disabled={saving || saved}
-          >
-            <Text style={styles.primaryButtonText}>
-              {saving ? 'GUARDANDO...' : saved ? 'GUARDADO ✓' : 'GUARDAR ENTRENAMIENTO'}
+          {persistStatus === 'saving' && (
+            <Text style={styles.persistHint}>Guardando entrenamiento…</Text>
+          )}
+          {persistStatus === 'done' && (
+            <Text style={styles.persistHint}>Entrenamiento registrado</Text>
+          )}
+          {persistStatus === 'error' && (
+            <Text style={styles.persistError}>
+              No se pudo guardar. Reintentá más tarde.
             </Text>
-            {!saving && <Text style={styles.buttonIcon}>💾</Text>}
-          </TouchableOpacity>
+          )}
 
           <TouchableOpacity style={styles.secondaryButton} activeOpacity={0.85}>
             <Text style={styles.secondaryButtonText}>COMPARTIR LOGRO</Text>
@@ -454,21 +501,19 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 40,
   },
-  primaryButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 8,
-    paddingVertical: 16,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
+  persistHint: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 8,
   },
-  primaryButtonText: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#000',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  persistError: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.tertiary,
+    textAlign: 'center',
+    marginBottom: 8,
   },
   secondaryButton: {
     backgroundColor: 'transparent',

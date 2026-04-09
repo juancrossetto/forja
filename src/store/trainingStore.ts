@@ -1,16 +1,33 @@
 import { create } from 'zustand';
 import { Workout, WorkoutSession, Exercise, TrainingPhase, TrainingDay } from '../types';
+import {
+  startActiveSession,
+  finishActiveSession,
+  cancelActiveSession,
+  getActiveSession,
+} from '../services/workoutService';
 
 interface TrainingState {
   currentPhase: TrainingPhase | null;
   workouts: Workout[];
   activeSession: WorkoutSession | null;
-  startWorkout: (workoutId: string) => void;
+  sessionLogId: string | null;       // Supabase workout_logs id for the active session
+  restoredElapsedSeconds: number;    // elapsed seconds loaded from DB on restore
+  workoutStartedAt: number | null;   // Unix ms timestamp — accounts for restored offset
+  elapsedSeconds: number;            // live elapsed seconds — single source of truth for UI
+  /** When false, global timer ticks (banner + live screen). When true, timer frozen until resume. */
+  isWorkoutTimerPaused: boolean;
+  setWorkoutTimerPaused: (paused: boolean) => void;
+  isLoading: boolean;
+  startWorkout: (workoutId: string) => Promise<void>;
   completeExercise: (exerciseId: string) => void;
   endWorkout: (rpe: number, notes: string) => Promise<void>;
+  initActiveSession: () => Promise<void>;
   getWorkoutById: (id: string) => Workout | undefined;
   getCurrentWorkout: () => Workout | undefined;
-  cancelWorkout: () => void;
+  cancelWorkout: () => Promise<void>;
+  clearSession: () => void;
+  setElapsed: (seconds: number) => void;
 }
 
 // Mock exercises for Phase 02: Potencia Estructural
@@ -216,33 +233,58 @@ const MOCK_PHASE: TrainingPhase = {
   ],
 };
 
+const ALL_WORKOUTS = [WORKOUT_PECHO_ESPALDA, WORKOUT_BRAZOS, WORKOUT_PIERNAS, WORKOUT_CARDIO];
+
 export const useTrainingStore = create<TrainingState>((set, get) => ({
   currentPhase: MOCK_PHASE,
-  workouts: [WORKOUT_PECHO_ESPALDA, WORKOUT_BRAZOS, WORKOUT_PIERNAS, WORKOUT_CARDIO],
+  workouts: ALL_WORKOUTS,
   activeSession: null,
+  sessionLogId: null,
+  restoredElapsedSeconds: 0,
+  workoutStartedAt: null,
+  elapsedSeconds: 0,
+  isWorkoutTimerPaused: false,
+  isLoading: false,
 
-  startWorkout: (workoutId: string) => {
+  setWorkoutTimerPaused: (paused: boolean) => {
+    set({ isWorkoutTimerPaused: paused });
+  },
+
+  startWorkout: async (workoutId: string) => {
     const workout = get().getWorkoutById(workoutId);
-    if (workout) {
-      const session: WorkoutSession = {
-        id: `session_${Date.now()}`,
-        workoutId,
-        startTime: new Date(),
-        endTime: null,
-        completedExercises: [],
-        rpe: null,
-        notes: '',
-        heartRate: null,
-        caloriesBurned: null,
-      };
-      set({ activeSession: session });
-    }
+    if (!workout) return;
+
+    const session: WorkoutSession = {
+      id: `session_${Date.now()}`,
+      workoutId,
+      startTime: new Date(),
+      endTime: null,
+      completedExercises: [],
+      rpe: null,
+      notes: '',
+      heartRate: null,
+      caloriesBurned: null,
+    };
+
+    set({
+      activeSession: session,
+      sessionLogId: null,
+      restoredElapsedSeconds: 0,
+      workoutStartedAt: Date.now(),
+      elapsedSeconds: 0,
+      isWorkoutTimerPaused: false,
+    });
+
+    const logId = await startActiveSession({
+      workout_name: workout.title,
+      workout_type: workout.type,
+    });
+    set({ sessionLogId: logId });
   },
 
   completeExercise: (exerciseId: string) => {
     set((state) => {
       if (!state.activeSession) return state;
-
       return {
         activeSession: {
           ...state.activeSession,
@@ -253,33 +295,77 @@ export const useTrainingStore = create<TrainingState>((set, get) => ({
   },
 
   endWorkout: async (rpe: number, notes: string) => {
-    set({ isLoading: true } as any);
+    set({ isLoading: true });
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      const { activeSession, sessionLogId } = get();
+      if (!activeSession) return;
 
-      set((state) => {
-        if (!state.activeSession) return state;
+      const durationSeconds = Math.round(
+        (new Date().getTime() - activeSession.startTime.getTime()) / 1000
+      );
+      const durationMinutes = Math.max(1, Math.round(durationSeconds / 60));
 
-        const durationMinutes = Math.round(
-          (new Date().getTime() - state.activeSession.startTime.getTime()) / 60000
-        );
+      if (sessionLogId) {
+        await finishActiveSession(sessionLogId, {
+          duration_min: durationMinutes,
+          rpe,
+          comments: notes || null,
+        });
+      }
 
-        return {
-          activeSession: {
-            ...state.activeSession,
-            endTime: new Date(),
-            rpe,
-            notes,
-            caloriesBurned: Math.round((durationMinutes / 60) * 350), // Rough estimate
-          },
-        };
+      set({
+        activeSession: {
+          ...activeSession,
+          endTime: new Date(),
+          rpe,
+          notes,
+          caloriesBurned: Math.round((durationMinutes / 60) * 350),
+        },
+        sessionLogId: null,
+        workoutStartedAt: null,
       });
     } catch (error) {
       console.error('Error ending workout:', error);
     } finally {
-      set({ isLoading: false } as any);
+      set({ isLoading: false });
     }
+  },
+
+  /**
+   * Restore an in-progress session from Supabase.
+   * Call this on app start or when the live screen mounts with no local session.
+   */
+  initActiveSession: async () => {
+    if (get().activeSession) return; // already have one locally
+
+    const record = await getActiveSession();
+    if (!record) return;
+
+    // Best-effort match by workout name against mock data
+    const workout = ALL_WORKOUTS.find((w) => w.title === record.workout_name);
+    if (!workout) return;
+
+    const session: WorkoutSession = {
+      id: `session_restored_${record.id}`,
+      workoutId: workout.id,
+      // Reconstruct startTime so that (now - startTime) ≈ elapsed_seconds
+      startTime: new Date(Date.now() - record.elapsed_seconds * 1000),
+      endTime: null,
+      completedExercises: record.completed_exercises,
+      rpe: null,
+      notes: '',
+      heartRate: null,
+      caloriesBurned: null,
+    };
+
+    set({
+      activeSession: session,
+      sessionLogId: record.id,
+      restoredElapsedSeconds: record.elapsed_seconds,
+      workoutStartedAt: Date.now() - record.elapsed_seconds * 1000,
+      elapsedSeconds: record.elapsed_seconds,
+      isWorkoutTimerPaused: false,
+    });
   },
 
   getWorkoutById: (id: string) => {
@@ -292,7 +378,34 @@ export const useTrainingStore = create<TrainingState>((set, get) => ({
     return workouts.find((w) => w.id === activeSession.workoutId);
   },
 
-  cancelWorkout: () => {
-    set({ activeSession: null });
+  cancelWorkout: async () => {
+    const { sessionLogId } = get();
+    if (sessionLogId) {
+      await cancelActiveSession(sessionLogId);
+    }
+    set({
+      activeSession: null,
+      sessionLogId: null,
+      restoredElapsedSeconds: 0,
+      workoutStartedAt: null,
+      elapsedSeconds: 0,
+      isWorkoutTimerPaused: false,
+    });
+  },
+
+  /** Clear local session state without touching Supabase (used after finishing). */
+  clearSession: () => {
+    set({
+      activeSession: null,
+      sessionLogId: null,
+      restoredElapsedSeconds: 0,
+      workoutStartedAt: null,
+      elapsedSeconds: 0,
+      isWorkoutTimerPaused: false,
+    });
+  },
+
+  setElapsed: (seconds: number) => {
+    set({ elapsedSeconds: seconds });
   },
 }));

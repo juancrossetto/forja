@@ -6,10 +6,12 @@ import {
   ScrollView,
   FlatList,
   TouchableOpacity,
-  ImageBackground,
   Image,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTrainingStore } from '../../store/trainingStore';
 
 const colors = {
   bg: '#0e0e0e',
@@ -70,7 +72,33 @@ const EXERCISES: Exercise[] = [
 const HERO_IMAGE =
   'https://images.unsplash.com/photo-1574680178050-55a41cebbe7f?q=80&w=400';
 
-export const DetalleEntrenamientoScreen: React.FC = () => {
+interface Props {
+  navigation: any;
+  route: any;
+}
+
+export const DetalleEntrenamientoScreen: React.FC<Props> = ({ navigation, route }) => {
+  const { trainingId, trainingName } = route.params ?? {};
+  const { startWorkout, getWorkoutById } = useTrainingStore();
+  const insets = useSafeAreaInsets();
+
+  const workout = getWorkoutById(trainingId);
+  const exercises = workout?.exercises ?? EXERCISES;
+
+  // Tab bar height: 60px items + 24px paddingBottom (iOS) or 12px (Android)
+  const TAB_BAR_HEIGHT = 60 + (Platform.OS === 'ios' ? 24 : 12);
+  const buttonBottom = insets.bottom + TAB_BAR_HEIGHT;
+
+  const handleIniciar = () => {
+    // Fire-and-forget: create the Supabase record in background
+    startWorkout(trainingId).catch(console.error);
+    // Navigate immediately — EntrenamientoEnVivo handles missing sessionLogId gracefully
+    navigation.navigate('EntrenamientoEnVivo', {
+      trainingId: trainingId ?? '',
+      trainingName: trainingName ?? workout?.title ?? 'Entrenamiento',
+    });
+  };
+
   const renderExerciseCard = ({ item, index }: { item: Exercise; index: number }) => {
     if (index === 3) {
       return (
@@ -204,9 +232,10 @@ export const DetalleEntrenamientoScreen: React.FC = () => {
       </ScrollView>
 
       {/* Fixed Button */}
-      <View style={styles.fixedButtonContainer}>
+      <View style={[styles.fixedButtonContainer, { bottom: buttonBottom }]}>
         <TouchableOpacity
           style={styles.startButton}
+          onPress={handleIniciar}
           activeOpacity={0.85}
         >
           <Text style={styles.startButtonText}>Iniciar Entrenamiento</Text>
@@ -469,11 +498,10 @@ const styles = StyleSheet.create({
   },
   fixedButtonContainer: {
     position: 'absolute',
-    bottom: 0,
     left: 0,
     right: 0,
     paddingHorizontal: 24,
-    paddingVertical: 24,
+    paddingVertical: 16,
     backgroundColor: colors.bg,
   },
   startButton: {

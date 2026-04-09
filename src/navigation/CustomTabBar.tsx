@@ -39,10 +39,16 @@ interface CustomTabBarProps extends BottomTabBarProps {
 
 export const CustomTabBar: React.FC<CustomTabBarProps> = ({
   state,
+  descriptors,
   navigation,
   onAddPress,
 }) => {
   const paddingBottom = Platform.OS === 'ios' ? 24 : 12;
+
+  // Respect tabBarStyle: { display: 'none' } set on individual screens
+  const focusedDescriptor = descriptors[state.routes[state.index]?.key];
+  const tabBarStyle = focusedDescriptor?.options?.tabBarStyle as any;
+  if (tabBarStyle?.display === 'none') return null;
 
   return (
     <View style={[styles.container, { paddingBottom }]}>

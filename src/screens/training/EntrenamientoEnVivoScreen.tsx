@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,8 +6,11 @@ import {
   TouchableOpacity,
   ImageBackground,
   Image,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import { useTrainingStore } from '../../store/trainingStore';
 
 const colors = {
   bg: '#0e0e0e',
@@ -21,33 +24,112 @@ const colors = {
   textTertiary: 'rgba(255,255,255,0.45)',
 };
 
-const HERO_IMAGE =
+const FALLBACK_IMAGE =
   'https://images.unsplash.com/photo-1614730321146-b6fa6a46bcb4?q=80&w=600';
 
-export const EntrenamientoEnVivoScreen: React.FC = () => {
-  const [timeRemaining, setTimeRemaining] = useState(44);
-  const [isPlaying, setIsPlaying] = useState(true);
-  const totalTime = 90;
-  const completionPercentage = (((totalTime - timeRemaining) / totalTime) * 100);
+interface Props {
+  navigation: any;
+  route: any;
+}
 
+export const EntrenamientoEnVivoScreen: React.FC<Props> = ({ navigation, route }) => {
+  const { trainingId, trainingName } = route.params ?? {};
+
+  const {
+    activeSession,
+    sessionLogId,
+    getCurrentWorkout,
+    completeExercise,
+    cancelWorkout,
+    clearSession,
+    initActiveSession,
+    elapsedSeconds,
+    isWorkoutTimerPaused,
+    setWorkoutTimerPaused,
+  } = useTrainingStore();
+
+  const workout = getCurrentWorkout();
+  const exercises = workout?.exercises ?? [];
+  const completedCount = activeSession?.completedExercises.length ?? 0;
+  const currentExercise = exercises[completedCount] ?? null;
+  const nextExercise = exercises[completedCount + 1] ?? null;
+  const completionPercent =
+    exercises.length > 0 ? (completedCount / exercises.length) * 100 : 0;
+  const allDone = exercises.length > 0 && completedCount >= exercises.length;
+
+  // Stable ref used by intervals to always read the latest values
+  const stateRef = useRef({
+    sessionLogId,
+    elapsed: elapsedSeconds,
+    completed: activeSession?.completedExercises ?? [] as string[],
+  });
+  stateRef.current = {
+    sessionLogId,
+    elapsed: elapsedSeconds,
+    completed: activeSession?.completedExercises ?? [],
+  };
+
+  // Restore session from Supabase if there is none in memory
   useEffect(() => {
-    if (!isPlaying) return;
+    if (!activeSession) {
+      initActiveSession();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const interval = setInterval(() => {
-      setTimeRemaining((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
+  const formatTime = (s: number): string => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+  };
 
-    return () => clearInterval(interval);
-  }, [isPlaying]);
+  const handleCompleteExercise = useCallback(() => {
+    if (!currentExercise || allDone) return;
+    completeExercise(currentExercise.id);
+  }, [currentExercise, allDone, completeExercise]);
 
-  const minutes = Math.floor(timeRemaining / 60);
-  const seconds = timeRemaining % 60;
+  // Finish workout → save final state → clear store → navigate to summary
+  const handleFinish = useCallback(() => {
+    setWorkoutTimerPaused(true);
+    const { elapsed, completed } = stateRef.current;
+    const sid = stateRef.current.sessionLogId;
+    clearSession();
+    navigation.replace('ResumenEntrenamiento', {
+      trainingId: trainingId ?? '',
+      trainingName: trainingName ?? workout?.title ?? '',
+      durationSeconds: Math.max(0, elapsed),
+      calories: workout?.calories ?? 0,
+      exercises: completed.length,
+      sessionLogId: sid,
+      completedExerciseIds: [...completed],
+      workoutType: workout?.type ?? null,
+    });
+  }, [navigation, trainingId, trainingName, workout, clearSession, setWorkoutTimerPaused]);
+
+  // Abandon workout with confirmation
+  const handleCancel = useCallback(() => {
+    Alert.alert(
+      'Abandonar entrenamiento',
+      '¿Querés cancelar la sesión? El progreso no se guardará.',
+      [
+        { text: 'Continuar', style: 'cancel' },
+        {
+          text: 'Abandonar',
+          style: 'destructive',
+          onPress: async () => {
+            setWorkoutTimerPaused(true);
+            await cancelWorkout();
+            navigation.goBack();
+          },
+        },
+      ]
+    );
+  }, [cancelWorkout, navigation, setWorkoutTimerPaused]);
 
   return (
     <View style={styles.container}>
-      {/* Video Canvas */}
+      {/* Hero image / exercise visual */}
       <ImageBackground
-        source={{ uri: HERO_IMAGE }}
+        source={{ uri: currentExercise?.image ?? FALLBACK_IMAGE }}
         style={styles.videoCanvas}
         imageStyle={styles.videoImage}
       >
@@ -56,129 +138,153 @@ export const EntrenamientoEnVivoScreen: React.FC = () => {
           style={styles.videoGradient}
         />
 
-        {/* Current Exercise Label */}
         <View style={styles.exerciseLabel}>
-          <Text style={styles.exerciseLabelText}>Current Exercise</Text>
-          <Text style={styles.exerciseName}>KETTLEBELL SWINGS</Text>
+          <Text style={styles.exerciseLabelText}>Ejercicio actual</Text>
+          <Text style={styles.exerciseName} numberOfLines={2}>
+            {currentExercise?.name ?? (allDone ? '¡Completado!' : 'Iniciando...')}
+          </Text>
           <View style={styles.exerciseTags}>
-            <View style={styles.exerciseTag}>
-              <Text style={styles.exerciseTagText}>32 KG</Text>
-            </View>
-            <View style={styles.roundTag}>
-              <Text style={styles.roundTagText}>Round 2/4</Text>
-            </View>
+            {currentExercise?.weight != null && (
+              <View style={styles.exerciseTag}>
+                <Text style={styles.exerciseTagText}>{currentExercise.weight} KG</Text>
+              </View>
+            )}
+            {currentExercise && (
+              <View style={styles.roundTag}>
+                <Text style={styles.roundTagText}>
+                  {currentExercise.sets} series · {currentExercise.reps} reps
+                </Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.countTag}>
+            <Text style={styles.countTagText}>
+              {completedCount}/{exercises.length} ejercicios
+            </Text>
           </View>
         </View>
       </ImageBackground>
 
-      {/* Metrics Dashboard */}
+      {/* Metrics panel */}
       <View style={styles.metricsContainer}>
-        {/* Progress Bar */}
+        {/* Overall progress bar */}
         <View style={styles.progressBarWrapper}>
           <View style={styles.progressBar}>
             <LinearGradient
               colors={[colors.primary, colors.secondary]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
-              style={[styles.progressFill, { width: `${completionPercentage}%` }]}
+              style={[styles.progressFill, { width: `${completionPercent}%` }]}
             />
           </View>
         </View>
 
-        {/* Timer Card */}
+        {/* Elapsed timer */}
         <View style={styles.timerCard}>
-          <Text style={styles.timerLabel}>Duration remaining</Text>
-          <Text style={styles.timerDisplay}>
-            {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
+          <Text style={styles.timerLabel}>
+            {!isWorkoutTimerPaused ? 'Tiempo activo' : '— Pausado —'}
           </Text>
-
-          {/* Timeline */}
+          <Text style={styles.timerDisplay}>{formatTime(elapsedSeconds)}</Text>
           <View style={styles.timeline}>
             <Text style={styles.timelineStart}>00:00</Text>
             <View style={styles.timelineBar}>
               <View
                 style={[
                   styles.timelinePointer,
-                  { left: `${completionPercentage}%` },
+                  { left: `${Math.min(completionPercent, 96)}%` as any },
                 ]}
               />
             </View>
-            <Text style={styles.timelineEnd}>01:30</Text>
+            <Text style={styles.timelineEnd}>{exercises.length} ej.</Text>
           </View>
         </View>
 
-        {/* Metrics Grid */}
+        {/* Metrics grid */}
         <View style={styles.metricsGrid}>
-          {/* Workout Finish */}
           <View style={styles.metricCard}>
-            <Text style={styles.metricLabel}>Workout Finish</Text>
-            <Text style={styles.metricValue}>14:20</Text>
-            <View style={styles.metricFooter}>
-              <Text style={styles.metricFooterText}>LEFT</Text>
-            </View>
+            <Text style={styles.metricLabel}>Completados</Text>
+            <Text style={styles.metricValue}>{completedCount}</Text>
+            <Text style={styles.metricFooterText}>EJERCICIOS</Text>
           </View>
-
-          {/* Completion */}
           <View style={styles.metricCard}>
-            <Text style={styles.metricLabel}>Completion</Text>
-            <Text style={styles.metricValue}>62%</Text>
-            <View style={styles.metricFooter}>
-              <Text style={styles.metricFooterText}>DONE</Text>
-            </View>
+            <Text style={styles.metricLabel}>Progreso</Text>
+            <Text style={styles.metricValue}>{Math.round(completionPercent)}%</Text>
+            <Text style={styles.metricFooterText}>COMPLETADO</Text>
           </View>
         </View>
 
-        {/* Next Exercise */}
-        <TouchableOpacity style={styles.nextExercise} activeOpacity={0.8}>
-          <View style={styles.nextExerciseImage}>
-            <Image
-              source={{ uri: 'https://via.placeholder.com/56x56?text=Stretch' }}
-              style={styles.nextImage}
-            />
+        {/* Next exercise or done banner */}
+        {allDone ? (
+          <View style={[styles.nextExercise, styles.doneBanner]}>
+            <Text style={styles.doneBannerText}>🎯 ¡Todos los ejercicios completados!</Text>
           </View>
-          <View style={styles.nextExerciseInfo}>
-            <Text style={styles.nextLabel}>Next</Text>
-            <Text style={styles.nextExerciseName}>Pigeon Stretch</Text>
+        ) : nextExercise ? (
+          <View style={styles.nextExercise}>
+            <View style={styles.nextExerciseImage}>
+              <Image
+                source={{ uri: nextExercise.image }}
+                style={styles.nextImage}
+              />
+            </View>
+            <View style={styles.nextExerciseInfo}>
+              <Text style={styles.nextLabel}>Siguiente</Text>
+              <Text style={styles.nextExerciseName}>{nextExercise.name}</Text>
+            </View>
+            <Text style={styles.nextArrow}>›</Text>
           </View>
-          <Text style={styles.nextArrow}>›</Text>
-        </TouchableOpacity>
+        ) : null}
       </View>
 
-      {/* Control Bar */}
+      {/* Control bar */}
       <View style={styles.controlBar}>
-        {/* Back */}
-        <TouchableOpacity style={styles.controlButton} activeOpacity={0.7}>
-          <Text style={styles.controlIcon}>⏪</Text>
-          <Text style={styles.controlLabel}>BACK</Text>
+        <TouchableOpacity style={styles.controlButton} onPress={handleCancel} activeOpacity={0.7}>
+          <View style={styles.controlIconWrap}>
+            <Ionicons name="close" size={22} color={colors.textSecondary} />
+          </View>
+          <Text style={styles.controlLabel}>SALIR</Text>
         </TouchableOpacity>
 
-        {/* Lock */}
-        <TouchableOpacity style={styles.controlButton} activeOpacity={0.7}>
-          <Text style={styles.controlIcon}>🔒</Text>
-          <Text style={styles.controlLabel}>LOCK</Text>
+        <TouchableOpacity
+          style={styles.controlButton}
+          onPress={handleCompleteExercise}
+          disabled={allDone}
+          activeOpacity={0.7}
+        >
+          <View style={styles.controlIconWrap}>
+            <Ionicons
+              name="checkmark-circle"
+              size={22}
+              color={allDone ? 'rgba(255,255,255,0.2)' : colors.textSecondary}
+            />
+          </View>
+          <Text style={[styles.controlLabel, allDone && styles.disabledLabel]}>HECHO</Text>
         </TouchableOpacity>
 
-        {/* Play/Pause (Floating Center) */}
+        {/* Play / Pause */}
         <TouchableOpacity
           style={styles.playButton}
-          onPress={() => setIsPlaying(!isPlaying)}
+          onPress={() => setWorkoutTimerPaused(!isWorkoutTimerPaused)}
           activeOpacity={0.85}
         >
-          <Text style={styles.playIcon}>
-            {isPlaying ? '⏸' : '▶'}
-          </Text>
+          <Ionicons
+            name={isWorkoutTimerPaused ? 'play' : 'pause'}
+            size={28}
+            color="#000"
+          />
         </TouchableOpacity>
 
-        {/* Stop */}
-        <TouchableOpacity style={styles.controlButton} activeOpacity={0.7}>
-          <Text style={styles.controlIcon}>⏹</Text>
-          <Text style={styles.controlLabel}>STOP</Text>
+        <TouchableOpacity style={styles.controlButton} onPress={handleFinish} activeOpacity={0.7}>
+          <View style={styles.controlIconWrap}>
+            <Ionicons name="flag" size={22} color={colors.primary} />
+          </View>
+          <Text style={[styles.controlLabel, { color: colors.primary }]}>FINALIZAR</Text>
         </TouchableOpacity>
 
-        {/* Skip */}
         <TouchableOpacity style={styles.controlButton} activeOpacity={0.7}>
-          <Text style={styles.controlIcon}>⏭</Text>
-          <Text style={styles.controlLabel}>NEXT</Text>
+          <View style={styles.controlIconWrap}>
+            <Ionicons name="lock-closed" size={22} color={colors.textSecondary} />
+          </View>
+          <Text style={styles.controlLabel}>LOCK</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -192,7 +298,6 @@ const styles = StyleSheet.create({
   },
   videoCanvas: {
     flex: 1,
-    position: 'relative',
     backgroundColor: colors.elevated,
   },
   videoImage: {
@@ -203,12 +308,13 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: '40%',
+    height: '50%',
   },
   exerciseLabel: {
     position: 'absolute',
     top: 24,
     left: 24,
+    right: 24,
     zIndex: 10,
   },
   exerciseLabelText: {
@@ -220,16 +326,17 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   exerciseName: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '700',
     color: colors.textPrimary,
     textTransform: 'uppercase',
-    lineHeight: 32,
+    lineHeight: 30,
     marginBottom: 8,
   },
   exerciseTags: {
     flexDirection: 'row',
     gap: 8,
+    marginBottom: 6,
   },
   exerciseTag: {
     backgroundColor: 'rgba(0, 227, 253, 0.2)',
@@ -255,15 +362,26 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textTransform: 'uppercase',
   },
+  countTag: {
+    backgroundColor: 'rgba(209, 255, 38, 0.15)',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  countTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.primary,
+    textTransform: 'uppercase',
+  },
   metricsContainer: {
     paddingHorizontal: 24,
     paddingTop: 16,
     paddingBottom: 120,
     gap: 16,
   },
-  progressBarWrapper: {
-    marginBottom: 8,
-  },
+  progressBarWrapper: {},
   progressBar: {
     height: 4,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
@@ -305,7 +423,6 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: 8,
   },
   timelineStart: {
@@ -356,11 +473,6 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     marginBottom: 8,
   },
-  metricFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
   metricFooterText: {
     fontSize: 10,
     fontWeight: '700',
@@ -368,7 +480,6 @@ const styles = StyleSheet.create({
   },
   nextExercise: {
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    backdropFilter: 'blur(20px)',
     borderRadius: 8,
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -399,7 +510,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   nextExerciseName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.textPrimary,
     textTransform: 'uppercase',
@@ -407,6 +518,17 @@ const styles = StyleSheet.create({
   nextArrow: {
     fontSize: 20,
     color: colors.textSecondary,
+  },
+  doneBanner: {
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: `${colors.primary}40`,
+  },
+  doneBannerText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.primary,
+    textAlign: 'center',
   },
   controlBar: {
     position: 'absolute',
@@ -418,7 +540,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-around',
     paddingBottom: 20,
-    backgroundColor: 'rgba(14, 14, 14, 0.8)',
+    backgroundColor: 'rgba(14, 14, 14, 0.92)',
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 255, 255, 0.05)',
   },
@@ -426,9 +548,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
-  controlIcon: {
-    fontSize: 28,
-    color: colors.textSecondary,
+  controlIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   controlLabel: {
     fontSize: 9,
@@ -436,6 +562,12 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  disabledIcon: {
+    color: 'rgba(255,255,255,0.2)',
+  },
+  disabledLabel: {
+    color: 'rgba(255,255,255,0.2)',
   },
   playButton: {
     width: 64,
@@ -451,10 +583,6 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 10,
   },
-  playIcon: {
-    fontSize: 32,
-    color: '#000',
-    fontWeight: 'bold',
-  },
 });
+
 export default EntrenamientoEnVivoScreen;
