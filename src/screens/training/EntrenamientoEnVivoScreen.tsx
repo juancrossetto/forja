@@ -99,6 +99,7 @@ export const EntrenamientoEnVivoScreen: React.FC<Props> = ({ navigation, route }
       durationSeconds: Math.max(0, elapsed),
       calories: workout?.calories ?? 0,
       exercises: completed.length,
+      totalExercises: exercises.length,
       sessionLogId: sid,
       completedExerciseIds: [...completed],
       workoutType: workout?.type ?? null,

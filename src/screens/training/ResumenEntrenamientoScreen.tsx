@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,33 +6,41 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { finishActiveSession, saveWorkoutLog } from '../../services/workoutService';
+import { colors } from '../../theme/colors';
+import { spacing, borderRadius } from '../../theme/spacing';
 
 const PERSIST_DELAY_MS = 2000;
 
-const colors = {
-  bg: '#0e0e0e',
-  surface: '#1a1a1a',
-  elevated: '#222222',
-  primary: '#D1FF26',
-  secondary: '#00e3fd',
-  tertiary: '#ff734a',
-  textPrimary: '#FFF',
-  textSecondary: 'rgba(255,255,255,0.70)',
-  textTertiary: 'rgba(255,255,255,0.45)',
+const C = {
+  bg: colors.background,
+  surface: colors.surface.base,
+  elevated: colors.surface.elevated,
+  primary: colors.primary.default,
+  secondary: colors.secondary.default,
+  tertiary: colors.tertiary.default,
+  textPrimary: colors.text.primary,
+  textSecondary: colors.text.secondary,
+  textTertiary: colors.text.tertiary,
 };
 
 export const ResumenEntrenamientoScreen: React.FC = () => {
   const route = useRoute<any>();
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+
   const {
     trainingName = 'Entrenamiento',
     durationSeconds = 0,
     calories = 0,
     exercises = 0,
+    totalExercises: totalExercisesParam,
     sessionLogId = null,
     completedExerciseIds = [] as string[],
     workoutType = null as string | null,
@@ -43,6 +51,21 @@ export const ResumenEntrenamientoScreen: React.FC = () => {
   const durationSecsRemainder = totalSec % 60;
   const durationMinForDb =
     totalSec > 0 ? Math.max(1, Math.round(totalSec / 60)) : 0;
+
+  const completedCount = Math.max(
+    exercises,
+    completedExerciseIds.length,
+  );
+  const totalExercises =
+    totalExercisesParam != null && totalExercisesParam > 0
+      ? totalExercisesParam
+      : Math.max(completedCount, 1);
+
+  const sessionCompletion = useMemo(() => {
+    if (totalExercisesParam === 0 && completedCount === 0) return 100;
+    const denom = Math.max(totalExercises, 1);
+    return Math.min(100, Math.round((completedCount / denom) * 100));
+  }, [completedCount, totalExercises, totalExercisesParam]);
 
   const [selectedRPE, setSelectedRPE] = useState<number>(5);
   const [comments, setComments] = useState<string>('');
@@ -100,444 +123,592 @@ export const ResumenEntrenamientoScreen: React.FC = () => {
     completedKey,
   ]);
 
+  const handleDone = () => {
+    navigation.popToTop();
+  };
+
+  const persistLabel =
+    persistStatus === 'saving'
+      ? 'Sincronizando con la nube…'
+      : persistStatus === 'done'
+        ? 'Sesión guardada'
+        : persistStatus === 'error'
+          ? 'Error al guardar'
+          : null;
+
   return (
-    <View style={styles.container}>
+    <View style={styles.root}>
+      <LinearGradient
+        colors={['rgba(209, 255, 38, 0.12)', 'transparent']}
+        style={[styles.heroGlow, { paddingTop: insets.top }]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+      />
+
       <ScrollView
-        style={styles.scrollView}
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: insets.bottom + spacing.xxl },
+        ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Success Header */}
-        <View style={styles.successSection}>
-          <View style={styles.checkmarkContainer}>
-            <View style={styles.checkmarkOuter}>
-              <Text style={styles.checkmark}>✓</Text>
+        {/* Top bar */}
+        <View style={[styles.topBar, { paddingTop: spacing.sm }]}>
+          <TouchableOpacity
+            onPress={handleDone}
+            hitSlop={12}
+            style={styles.topBarBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Volver a entrenamientos"
+          >
+            <Ionicons name="close" size={22} color={C.textSecondary} />
+          </TouchableOpacity>
+          {persistLabel ? (
+            <View
+              style={[
+                styles.syncPill,
+                persistStatus === 'done' && styles.syncPillOk,
+                persistStatus === 'error' && styles.syncPillErr,
+              ]}
+            >
+              {persistStatus === 'saving' && (
+                <Ionicons name="cloud-upload-outline" size={14} color={C.secondary} />
+              )}
+              {persistStatus === 'done' && (
+                <Ionicons name="checkmark-circle" size={14} color={C.primary} />
+              )}
+              {persistStatus === 'error' && (
+                <Ionicons name="alert-circle" size={14} color={C.tertiary} />
+              )}
+              <Text style={styles.syncPillText}>{persistLabel}</Text>
             </View>
-          </View>
-
-          <Text style={styles.completedTitle}>ENTRENO COMPLETADO</Text>
-          <Text style={styles.completedSubtitle}>R3SET ALCANZADO</Text>
+          ) : (
+            <View style={styles.topBarSpacer} />
+          )}
         </View>
 
-        {/* Metrics Grid */}
-        <View style={styles.metricsSection}>
-          {/* Duration */}
-          <View style={[styles.metricCard, styles.metricCardWide]}>
-            <View style={styles.metricHeader}>
-              <View>
-                <Text style={styles.metricLabel}>Duración Total</Text>
-                <Text style={styles.metricValueLarge}>
-                  {durationMinutes}
-                  <Text style={styles.metricUnit}> min </Text>
-                  {String(durationSecsRemainder).padStart(2, '0')}
-                  <Text style={styles.metricUnit}> seg</Text>
-                </Text>
+        {/* Hero */}
+        <View style={styles.hero}>
+          <View style={styles.heroIconWrap}>
+            <LinearGradient
+              colors={[colors.gradients.kinetic[0], colors.gradients.kinetic[1]]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.heroIconRing}
+            >
+              <View style={styles.heroIconInner}>
+                <Ionicons name="checkmark" size={40} color={C.bg} />
               </View>
-              <Text style={styles.metricIcon}>⏱</Text>
-            </View>
+            </LinearGradient>
           </View>
-
-          {/* Calories */}
-          <View style={[styles.metricCard, styles.calorieCard]}>
-            <Text style={styles.metricLabel}>Calorías (Smartwatch)</Text>
-            <Text style={styles.metricValue}>
-              {calories > 0 ? calories : '—'}<Text style={styles.metricUnitSmall}>{calories > 0 ? 'kcal' : ''}</Text>
-            </Text>
-            <View style={styles.syncBadge}>
-              <Text style={styles.syncIcon}>⌚</Text>
-              <Text style={styles.syncText}>{calories > 0 ? 'Estimado' : 'Sin datos'}</Text>
-            </View>
-          </View>
-
-          {/* Heart Rate */}
-          <View style={[styles.metricCard, styles.hrCard]}>
-            <Text style={styles.metricLabel}>Frecuencia Media</Text>
-            <Text style={styles.metricValue}>
-              142<Text style={styles.metricUnitSmall}>bpm</Text>
-            </Text>
-            <View style={styles.hrBars}>
-              <View style={[styles.hrBar, { height: '50%', opacity: 0.2 }]} />
-              <View style={[styles.hrBar, { height: '75%', opacity: 0.4 }]} />
-              <View style={[styles.hrBar, { height: '100%' }]} />
-              <View style={[styles.hrBar, { height: '60%', opacity: 0.6 }]} />
-              <View style={[styles.hrBar, { height: '30%', opacity: 0.3 }]} />
-            </View>
-          </View>
-        </View>
-
-        {/* RPE Scale */}
-        <View style={styles.rpeSection}>
-          <Text style={styles.rpeTitle}>Escala de Esfuerzo (RPE)</Text>
-
-          <View style={styles.rpeScale}>
-            {[1, 2, 3, 4, 5, 6, 7].map((rpe) => (
-              <TouchableOpacity
-                key={rpe}
-                style={[
-                  styles.rpeButton,
-                  selectedRPE === rpe && styles.rpeButtonSelected,
-                ]}
-                onPress={() => setSelectedRPE(rpe)}
-                activeOpacity={0.7}
-              >
-                <View
-                  style={[
-                    styles.rpeBar,
-                    {
-                      height: `${rpe * 14}%`,
-                      minHeight: 8,
-                    },
-                    selectedRPE === rpe && styles.rpeBarSelected,
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.rpeLabel,
-                    selectedRPE === rpe && styles.rpeLabelSelected,
-                  ]}
-                >
-                  {rpe}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <Text style={styles.rpeQuestion}>
-            Cómo de intenso ha sido el entreno hoy?
+          <Text style={styles.heroKicker}>R3SET COMPLETADO</Text>
+          <Text style={styles.heroTitle} numberOfLines={2}>
+            {trainingName}
+          </Text>
+          <Text style={styles.heroSub}>
+            Tu sesión quedó registrada. Revisá las métricas y el esfuerzo percibido.
           </Text>
         </View>
 
-        {/* Comments Section */}
-        <View style={styles.commentsSection}>
-          <Text style={styles.commentsLabel}>Comentarios y Sensaciones</Text>
-
-          <View style={styles.textareaContainer}>
-            <TextInput
-              style={styles.textarea}
-              placeholder="Escribe cómo te has sentido..."
-              placeholderTextColor={colors.textTertiary}
-              multiline
-              numberOfLines={4}
-              value={comments}
-              onChangeText={setComments}
+        {/* Stat strip */}
+        <View style={styles.statStrip}>
+          <View style={styles.statCell}>
+            <LinearGradient
+              colors={['rgba(209, 255, 38, 0.2)', 'rgba(14, 14, 14, 0)']}
+              style={StyleSheet.absoluteFill}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
             />
-
-            <View style={styles.textareaIcons}>
-              <TouchableOpacity style={styles.iconButton} activeOpacity={0.7}>
-                <Text style={styles.iconEmoji}>😊</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.iconButton} activeOpacity={0.7}>
-                <Text style={styles.iconEmoji}>📸</Text>
-              </TouchableOpacity>
-            </View>
+            <Ionicons name="time-outline" size={20} color={C.primary} />
+            <Text style={styles.statValue}>
+              {String(durationMinutes).padStart(2, '0')}:
+              {String(durationSecsRemainder).padStart(2, '0')}
+            </Text>
+            <Text style={styles.statLabel}>Duración</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statCell}>
+            <Ionicons name="barbell-outline" size={20} color={C.secondary} />
+            <Text style={styles.statValue}>
+              {completedCount}
+              <Text style={styles.statValueMuted}>/{totalExercises}</Text>
+            </Text>
+            <Text style={styles.statLabel}>Ejercicios</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statCell}>
+            <Ionicons name="flame-outline" size={20} color={C.tertiary} />
+            <Text style={styles.statValue}>
+              {calories > 0 ? String(calories) : '—'}
+            </Text>
+            <Text style={styles.statLabel}>kcal est.</Text>
           </View>
         </View>
 
-        {/* Action Buttons */}
-        <View style={styles.buttonsSection}>
-          {persistStatus === 'saving' && (
-            <Text style={styles.persistHint}>Guardando entrenamiento…</Text>
-          )}
-          {persistStatus === 'done' && (
-            <Text style={styles.persistHint}>Entrenamiento registrado</Text>
-          )}
-          {persistStatus === 'error' && (
-            <Text style={styles.persistError}>
-              No se pudo guardar. Reintentá más tarde.
-            </Text>
-          )}
-
-          <TouchableOpacity style={styles.secondaryButton} activeOpacity={0.85}>
-            <Text style={styles.secondaryButtonText}>COMPARTIR LOGRO</Text>
-            <Text style={styles.buttonIcon}>📤</Text>
-          </TouchableOpacity>
+        {/* Progress card */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>Rendimiento de sesión</Text>
+            <Text style={styles.cardPct}>{sessionCompletion}%</Text>
+          </View>
+          <View style={styles.progressTrack}>
+            <LinearGradient
+              colors={[...colors.gradients.kinetic]}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              style={[styles.progressFill, { width: `${sessionCompletion}%` }]}
+            />
+          </View>
+          <Text style={styles.cardFoot}>
+            {totalExercisesParam === 0
+              ? 'Sesión sin bloques de fuerza (p. ej. cardio o movilidad).'
+              : `Completaste ${completedCount} de ${totalExercises} bloques previstos para esta rutina.`}
+          </Text>
         </View>
 
-        <View style={styles.bottomPadding} />
+        {/* Secondary metrics */}
+        <View style={styles.row2}>
+          <View style={[styles.miniCard, styles.miniCardCal]}>
+            <Ionicons name="watch-outline" size={18} color={C.secondary} />
+            <Text style={styles.miniTitle}>Wearable</Text>
+            <Text style={styles.miniValue}>
+              {calories > 0 ? `${calories} kcal` : 'Sin sync'}
+            </Text>
+            <Text style={styles.miniHint}>Estimación del plan</Text>
+          </View>
+          <View style={[styles.miniCard, styles.miniCardHr]}>
+            <Ionicons name="heart-outline" size={18} color={C.tertiary} />
+            <Text style={styles.miniTitle}>Ritmo cardíaco</Text>
+            <Text style={styles.miniValue}>—</Text>
+            <Text style={styles.miniHint}>Próximamente</Text>
+          </View>
+        </View>
+
+        {/* RPE */}
+        <View style={styles.rpeCard}>
+          <View style={styles.rpeHead}>
+            <Text style={styles.rpeTitle}>Esfuerzo percibido (RPE)</Text>
+            <View style={styles.rpeBadge}>
+              <Text style={styles.rpeBadgeText}>{selectedRPE}</Text>
+            </View>
+          </View>
+          <Text style={styles.rpeHint}>
+            Del 1 (muy fácil) al 7 (máximo esfuerzo sostenible)
+          </Text>
+          <View style={styles.rpeRow}>
+            {([1, 2, 3, 4, 5, 6, 7] as const).map((n) => {
+              const active = selectedRPE === n;
+              return (
+                <TouchableOpacity
+                  key={n}
+                  style={[styles.rpeChip, active && styles.rpeChipOn]}
+                  onPress={() => setSelectedRPE(n)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.rpeChipTxt, active && styles.rpeChipTxtOn]}>
+                    {n}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Comments */}
+        <View style={styles.commentsBlock}>
+          <Text style={styles.commentsTitle}>Sensaciones</Text>
+          <TextInput
+            style={styles.textarea}
+            placeholder="¿Cómo te sentiste? Notas para tu coach…"
+            placeholderTextColor={C.textTertiary}
+            multiline
+            value={comments}
+            onChangeText={setComments}
+            textAlignVertical="top"
+          />
+        </View>
+
+        {/* CTAs */}
+        <TouchableOpacity
+          style={styles.btnPrimary}
+          onPress={handleDone}
+          activeOpacity={0.9}
+        >
+          <LinearGradient
+            colors={[C.primary, colors.primary.dark]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.btnPrimaryGrad}
+          >
+            <Text style={styles.btnPrimaryTxt}>LISTO</Text>
+            <Ionicons name="arrow-forward" size={20} color={colors.primary.text} />
+          </LinearGradient>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.btnGhost} activeOpacity={0.85}>
+          <Ionicons name="share-outline" size={18} color={C.secondary} />
+          <Text style={styles.btnGhostTxt}>Compartir logro</Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: C.bg,
   },
-  scrollView: {
+  heroGlow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 280,
+    zIndex: 0,
+  },
+  scroll: {
     flex: 1,
+    zIndex: 1,
   },
-  successSection: {
+  scrollContent: {
+    paddingHorizontal: spacing.xxl,
+  },
+  topBar: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 48,
-    paddingBottom: 32,
+    justifyContent: 'space-between',
+    marginBottom: spacing.lg,
   },
-  checkmarkContainer: {
-    marginBottom: 24,
-  },
-  checkmarkOuter: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    borderWidth: 2,
-    borderColor: colors.primary,
+  topBarBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
   },
-  checkmark: {
-    fontSize: 48,
-    color: colors.primary,
-    fontWeight: '900',
+  topBarSpacer: {
+    width: 40,
   },
-  completedTitle: {
-    fontSize: 44,
-    fontWeight: '900',
-    color: colors.textPrimary,
-    textTransform: 'uppercase',
-    lineHeight: 44,
-    letterSpacing: -1,
-    marginBottom: 8,
-    textAlign: 'center',
-    textShadowColor: `${colors.primary}30`,
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 20,
-  },
-  completedSubtitle: {
-    fontSize: 14,
-    fontWeight: '400',
-    color: colors.secondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  metricsSection: {
-    paddingHorizontal: 24,
-    marginBottom: 48,
-    gap: 16,
-  },
-  metricCard: {
-    backgroundColor: colors.elevated,
-    borderRadius: 8,
-    padding: 24,
-  },
-  metricCardWide: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  metricHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    width: '100%',
-  },
-  metricLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 4,
-  },
-  metricValueLarge: {
-    fontSize: 40,
-    fontWeight: '900',
-    color: colors.textPrimary,
-  },
-  metricUnit: {
-    fontSize: 16,
-    color: colors.primary,
-    marginLeft: 4,
-  },
-  metricIcon: {
-    fontSize: 28,
-    opacity: 0.4,
-  },
-  calorieCard: {
-    borderLeftWidth: 2,
-    borderLeftColor: colors.secondary,
-  },
-  metricValue: {
-    fontSize: 32,
-    fontWeight: '900',
-    color: colors.textPrimary,
-    marginBottom: 12,
-  },
-  metricUnitSmall: {
-    fontSize: 12,
-    color: colors.secondary,
-    marginLeft: 4,
-  },
-  syncBadge: {
+  syncPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.lg,
+    backgroundColor: 'rgba(0, 227, 253, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 227, 253, 0.25)',
+    maxWidth: '72%',
   },
-  syncIcon: {
-    fontSize: 14,
+  syncPillOk: {
+    backgroundColor: 'rgba(209, 255, 38, 0.1)',
+    borderColor: 'rgba(209, 255, 38, 0.3)',
   },
-  syncText: {
-    fontSize: 10,
-    color: colors.textSecondary,
+  syncPillErr: {
+    backgroundColor: 'rgba(255, 115, 74, 0.12)',
+    borderColor: 'rgba(255, 115, 74, 0.35)',
   },
-  hrCard: {
-    borderLeftWidth: 2,
-    borderLeftColor: colors.tertiary,
-  },
-  hrBars: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 4,
-    marginTop: 12,
-    height: 32,
-  },
-  hrBar: {
-    flex: 1,
-    backgroundColor: colors.tertiary,
-    borderRadius: 2,
-  },
-  rpeSection: {
-    paddingHorizontal: 24,
-    backgroundColor: colors.elevated,
-    marginHorizontal: 24,
-    borderRadius: 12,
-    paddingVertical: 32,
-    marginBottom: 32,
-  },
-  rpeTitle: {
-    fontSize: 18,
+  syncPillText: {
+    fontSize: 11,
     fontWeight: '700',
-    color: colors.textPrimary,
-    textTransform: 'uppercase',
-    marginBottom: 24,
-    letterSpacing: -0.5,
+    color: C.textSecondary,
+    flexShrink: 1,
   },
-  rpeScale: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    height: 120,
-    marginBottom: 16,
-    gap: 4,
-  },
-  rpeButton: {
-    flex: 1,
+  hero: {
     alignItems: 'center',
-    gap: 8,
+    marginBottom: spacing.xxxl,
   },
-  rpeButtonSelected: {
-    // Selected state styles applied through rpeBarSelected
+  heroIconWrap: {
+    marginBottom: spacing.xl,
   },
-  rpeBar: {
-    width: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 2,
-  },
-  rpeBarSelected: {
-    backgroundColor: colors.primary,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-  rpeLabel: {
-    fontSize: 10,
-    fontWeight: '400',
-    color: 'rgba(255, 255, 255, 0.3)',
-  },
-  rpeLabelSelected: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  rpeQuestion: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    textAlign: 'center',
-  },
-  commentsSection: {
-    paddingHorizontal: 24,
-    marginBottom: 32,
-  },
-  commentsLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 12,
-  },
-  textareaContainer: {
-    position: 'relative',
-  },
-  textarea: {
-    backgroundColor: colors.surface,
-    borderWidth: 0,
-    color: colors.textPrimary,
-    fontSize: 14,
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 48,
-    borderRadius: 8,
-    textAlignVertical: 'top',
-    fontFamily: 'Manrope',
-  },
-  textareaIcons: {
-    position: 'absolute',
-    bottom: 12,
-    right: 12,
-    flexDirection: 'row',
-    gap: 8,
-  },
-  iconButton: {
-    padding: 8,
-  },
-  iconEmoji: {
-    fontSize: 18,
-    opacity: 0.4,
-  },
-  buttonsSection: {
-    paddingHorizontal: 24,
-    gap: 12,
-    marginBottom: 40,
-  },
-  persistHint: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  persistError: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.tertiary,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  secondaryButton: {
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderColor: 'rgba(72, 72, 71, 0.3)',
-    borderRadius: 8,
-    paddingVertical: 16,
-    flexDirection: 'row',
+  heroIconRing: {
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    padding: 3,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
   },
-  secondaryButtonText: {
-    fontSize: 16,
+  heroIconInner: {
+    flex: 1,
+    width: '100%',
+    borderRadius: 50,
+    backgroundColor: C.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroKicker: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 2,
+    color: C.primary,
+    marginBottom: spacing.sm,
+  },
+  heroTitle: {
+    fontSize: 28,
     fontWeight: '900',
-    color: colors.secondary,
+    color: C.textPrimary,
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: -0.5,
+    marginBottom: spacing.md,
+    lineHeight: 32,
+  },
+  heroSub: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: C.textSecondary,
+    textAlign: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  statStrip: {
+    flexDirection: 'row',
+    borderRadius: borderRadius.lg,
+    overflow: 'hidden',
+    backgroundColor: C.elevated,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    marginBottom: spacing.lg,
+  },
+  statCell: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xs,
+  },
+  statDivider: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border.default,
+    marginVertical: spacing.md,
+  },
+  statValue: {
+    fontSize: 17,
+    fontWeight: '900',
+    color: C.textPrimary,
+    marginTop: spacing.sm,
+  },
+  statValueMuted: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: C.textTertiary,
+  },
+  statLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: C.textTertiary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginTop: 4,
+  },
+  card: {
+    backgroundColor: C.elevated,
+    borderRadius: borderRadius.lg,
+    padding: spacing.xl,
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  cardTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: C.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  cardPct: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: C.primary,
+  },
+  progressTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    overflow: 'hidden',
+    marginBottom: spacing.md,
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  cardFoot: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: C.textTertiary,
+  },
+  row2: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  miniCard: {
+    flex: 1,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    borderWidth: 1,
+    minHeight: 112,
+  },
+  miniCardCal: {
+    backgroundColor: 'rgba(0, 227, 253, 0.08)',
+    borderColor: 'rgba(0, 227, 253, 0.2)',
+  },
+  miniCardHr: {
+    backgroundColor: 'rgba(255, 115, 74, 0.08)',
+    borderColor: 'rgba(255, 115, 74, 0.2)',
+  },
+  miniTitle: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: C.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginTop: spacing.sm,
+    marginBottom: 4,
+  },
+  miniValue: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: C.textPrimary,
+  },
+  miniHint: {
+    fontSize: 11,
+    color: C.textTertiary,
+    marginTop: spacing.xs,
+  },
+  rpeCard: {
+    backgroundColor: C.elevated,
+    borderRadius: borderRadius.lg,
+    padding: spacing.xl,
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+  },
+  rpeHead: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  rpeTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: C.textPrimary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  buttonIcon: {
-    fontSize: 16,
+  rpeBadge: {
+    minWidth: 36,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: borderRadius.sm,
+    backgroundColor: 'rgba(209, 255, 38, 0.15)',
+    alignItems: 'center',
   },
-  bottomPadding: {
-    height: 20,
+  rpeBadgeText: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: C.primary,
+  },
+  rpeHint: {
+    fontSize: 12,
+    color: C.textTertiary,
+    marginBottom: spacing.lg,
+  },
+  rpeRow: {
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'space-between',
+  },
+  rpeChip: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  rpeChipOn: {
+    backgroundColor: 'rgba(209, 255, 38, 0.2)',
+    borderColor: C.primary,
+  },
+  rpeChipTxt: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: C.textTertiary,
+  },
+  rpeChipTxtOn: {
+    color: C.primary,
+  },
+  commentsBlock: {
+    marginBottom: spacing.xl,
+  },
+  commentsTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: C.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: spacing.md,
+  },
+  textarea: {
+    backgroundColor: C.surface,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    color: C.textPrimary,
+    fontSize: 15,
+    lineHeight: 22,
+    padding: spacing.lg,
+    minHeight: 100,
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'Manrope',
+  },
+  btnPrimary: {
+    borderRadius: borderRadius.lg,
+    overflow: 'hidden',
+    marginBottom: spacing.md,
+  },
+  btnPrimaryGrad: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.lg,
+  },
+  btnPrimaryTxt: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: colors.primary.text,
+    letterSpacing: 1,
+  },
+  btnGhost: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.lg,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+  },
+  btnGhostTxt: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: C.secondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 });
+
 export default ResumenEntrenamientoScreen;

@@ -22,7 +22,10 @@ export type TrainingStackParamList = {
     trainingName: string;
     durationSeconds: number;
     calories: number;
+    /** Ejercicios completados en esta sesión */
     exercises: number;
+    /** Total de ejercicios del workout (para barra de progreso) */
+    totalExercises?: number;
     /** Row created by startActiveSession; final persist updates this row once. */
     sessionLogId?: string | null;
     completedExerciseIds?: string[];
