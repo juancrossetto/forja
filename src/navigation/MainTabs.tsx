@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Modal } from 'react-native';
 import { useNavigation, getFocusedRouteNameFromRoute } from '@react-navigation/native';
@@ -12,6 +12,7 @@ import CustomTabBar from './CustomTabBar';
 import { AddMenuOverlay } from '../screens/home/AddMenuOverlay';
 import { ActiveWorkoutBanner } from '../components/ActiveWorkoutBanner';
 import { WorkoutLiveTimer } from '../components/WorkoutLiveTimer';
+import { useTrainingStore } from '../store/trainingStore';
 
 // Empty placeholder screen for the Add tab (the actual UI is a modal)
 const EmptyScreen = () => null;
@@ -21,6 +22,11 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
 export const MainTabs: React.FC = () => {
   const [addMenuVisible, setAddMenuVisible] = useState(false);
   const navigation = useNavigation<any>();
+  const loadTrainingCatalog = useTrainingStore((s) => s.loadTrainingCatalog);
+
+  useEffect(() => {
+    void loadTrainingCatalog();
+  }, [loadTrainingCatalog]);
 
   const closeMenu = useCallback(() => setAddMenuVisible(false), []);
 

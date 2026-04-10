@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTrainingStore } from '../../store/trainingStore';
+import type { TrainingPhase } from '../../types';
 
 // Color palette
 const colors = {
@@ -33,21 +35,69 @@ interface DayCard {
   type: 'active' | 'rest' | 'normal';
 }
 
-const WORKOUT_DAYS: DayCard[] = [
-  { id: '1', workoutId: 'wk_001', day: 1, dayName: 'Lunes',     title: 'Empuje Horizontal',  duration: 75, intensity: 'Alta Intensidad', type: 'active' },
-  { id: '2', workoutId: 'wk_004', day: 2, dayName: 'Martes',    title: 'Tracción Vertical',  duration: 60, intensity: 'Moderada',        type: 'normal' },
-  { id: '3', workoutId: null,     day: 3, dayName: 'Miércoles', title: 'Descanso Activo',     duration: 30, intensity: 'Movilidad',       type: 'rest'   },
-  { id: '4', workoutId: 'wk_003', day: 4, dayName: 'Jueves',    title: 'Tren Inferior',       duration: 80, intensity: 'Max Esfuerzo',   type: 'normal' },
-  { id: '5', workoutId: 'wk_002', day: 5, dayName: 'Viernes',   title: 'Full Body Flow',      duration: 65, intensity: 'Moderada',       type: 'normal' },
-  { id: '6', workoutId: 'wk_004', day: 6, dayName: 'Sábado',    title: 'LISS & Recovery',     duration: 45, intensity: 'Baja',           type: 'normal' },
-  { id: '7', workoutId: null,     day: 7, dayName: 'Domingo',   title: 'Rest Day',             duration: 0,  intensity: 'Descanso',      type: 'rest'   },
+const DAY_NAMES = [
+  'Lunes',
+  'Martes',
+  'Miércoles',
+  'Jueves',
+  'Viernes',
+  'Sábado',
+  'Domingo',
 ];
+
+function dayCardsFromPhase(phase: TrainingPhase): DayCard[] {
+  return phase.days.map((d) => {
+    const hasWorkout = !!d.workout;
+    const isRest = d.type === 'descanso' || !hasWorkout;
+    const workoutId = d.workout?.id ?? null;
+    const duration = d.workout?.duration ?? 0;
+    const intensity = isRest
+      ? 'Descanso'
+      : d.workout?.type === 'cardio'
+        ? 'Cardio'
+        : 'Alta Intensidad';
+    const type: DayCard['type'] = isRest
+      ? 'rest'
+      : d.dayNumber === 1
+        ? 'active'
+        : 'normal';
+    return {
+      id: `d-${d.dayNumber}`,
+      workoutId,
+      day: d.dayNumber,
+      dayName: DAY_NAMES[d.dayNumber - 1] ?? '',
+      title: d.title,
+      duration,
+      intensity,
+      type,
+    };
+  });
+}
 
 interface Props {
   navigation: any;
 }
 
 export const EntrenamientosScreen: React.FC<Props> = ({ navigation }) => {
+  const currentPhase = useTrainingStore((s) => s.currentPhase);
+  const loadTrainingCatalog = useTrainingStore((s) => s.loadTrainingCatalog);
+  const isLoading = useTrainingStore((s) => s.isLoading);
+
+  useEffect(() => {
+    loadTrainingCatalog();
+  }, [loadTrainingCatalog]);
+
+  const scheduleDays = useMemo(() => {
+    if (currentPhase?.days?.length) {
+      return dayCardsFromPhase(currentPhase);
+    }
+    return [];
+  }, [currentPhase]);
+
+  const phaseTag = currentPhase
+    ? `Fase ${String(currentPhase.number).padStart(2, '0')}`
+    : '—';
+
   const renderDayCard = ({ item }: { item: DayCard }) => {
     const isActive = item.type === 'active';
     const isRest = item.type === 'rest';
@@ -136,15 +186,22 @@ export const EntrenamientosScreen: React.FC<Props> = ({ navigation }) => {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>
-            POTENCIA{'\n'}ESTRUCTURAL
+          <Text style={styles.headerTitle} numberOfLines={3}>
+            {currentPhase
+              ? currentPhase.name.toUpperCase()
+              : isLoading
+                ? 'CARGANDO…'
+                : 'PLAN DE ENTRENAMIENTO'}
           </Text>
           <View style={styles.headerTags}>
             <View style={styles.phaseTag}>
-              <Text style={styles.phaseTagText}>Fase 02</Text>
+              <Text style={styles.phaseTagText}>{phaseTag}</Text>
             </View>
-            <Text style={styles.phaseDescription}>
-              Hipertrofia Funcional
+            <Text style={styles.phaseDescription} numberOfLines={2}>
+              {currentPhase?.description ??
+                (isLoading
+                  ? 'Sincronizando con Supabase…'
+                  : 'Configurá fase y días en Supabase (training_phases, training_days).')}
             </Text>
           </View>
         </View>
@@ -198,16 +255,29 @@ export const EntrenamientosScreen: React.FC<Props> = ({ navigation }) => {
         <View style={styles.scheduleSection}>
           <Text style={styles.scheduleTitle}>Cronograma Semanal</Text>
           <Text style={styles.scheduleSubtitle}>
-            Desliza para explorar
+            {scheduleDays.length > 0
+              ? 'Desliza para explorar'
+              : 'Sin sesiones cargadas'}
           </Text>
 
-          <FlatList
-            data={WORKOUT_DAYS}
-            renderItem={renderDayCard}
-            keyExtractor={(item) => item.id}
-            scrollEnabled={false}
-            contentContainerStyle={styles.daysList}
-          />
+          {scheduleDays.length === 0 && !isLoading ? (
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyTitle}>No hay plan activo</Text>
+              <Text style={styles.emptyBody}>
+                Ejecutá el seed SQL (013_seed_training_catalog) o cargá training_phases /
+                training_days en el dashboard de Supabase. Los ejercicios vienen de la tabla
+                exercises enlazada por workout_exercises.
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={scheduleDays}
+              renderItem={renderDayCard}
+              keyExtractor={(item) => item.id}
+              scrollEnabled={false}
+              contentContainerStyle={styles.daysList}
+            />
+          )}
         </View>
       </ScrollView>
     </View>
@@ -374,6 +444,24 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginBottom: 24,
+  },
+  emptyBox: {
+    backgroundColor: colors.elevated,
+    borderRadius: 8,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: 8,
+  },
+  emptyBody: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: colors.textSecondary,
   },
   daysList: {
     gap: 16,

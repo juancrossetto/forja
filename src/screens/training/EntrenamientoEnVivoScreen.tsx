@@ -1,15 +1,17 @@
-import React, { useEffect, useCallback, useRef } from 'react';
+import React, { useEffect, useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  ImageBackground,
-  Image,
-  Alert,
+  Modal,
+  Pressable,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { CommonActions } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTrainingStore } from '../../store/trainingStore';
 
 const colors = {
@@ -32,8 +34,20 @@ interface Props {
   route: any;
 }
 
+/** Reset Training stack to hub — reliable vs goBack/popToTop when history is odd (banner, deep link). */
+function exitToTrainingHub(navigation: { dispatch: (a: ReturnType<typeof CommonActions.reset>) => void }) {
+  navigation.dispatch(
+    CommonActions.reset({
+      index: 0,
+      routes: [{ name: 'Entrenamientos' }],
+    }),
+  );
+}
+
 export const EntrenamientoEnVivoScreen: React.FC<Props> = ({ navigation, route }) => {
   const { trainingId, trainingName } = route.params ?? {};
+  const insets = useSafeAreaInsets();
+  const [abandonModalVisible, setAbandonModalVisible] = useState(false);
 
   const {
     activeSession,
@@ -106,34 +120,74 @@ export const EntrenamientoEnVivoScreen: React.FC<Props> = ({ navigation, route }
     });
   }, [navigation, trainingId, trainingName, workout, clearSession, setWorkoutTimerPaused]);
 
-  // Abandon workout with confirmation
   const handleCancel = useCallback(() => {
-    Alert.alert(
-      'Abandonar entrenamiento',
-      '¿Querés cancelar la sesión? El progreso no se guardará.',
-      [
-        { text: 'Continuar', style: 'cancel' },
-        {
-          text: 'Abandonar',
-          style: 'destructive',
-          onPress: async () => {
-            setWorkoutTimerPaused(true);
-            await cancelWorkout();
-            navigation.goBack();
-          },
-        },
-      ]
-    );
+    setAbandonModalVisible(true);
+  }, []);
+
+  const confirmAbandon = useCallback(() => {
+    setAbandonModalVisible(false);
+    setWorkoutTimerPaused(true);
+    void cancelWorkout().catch(() => {
+      useTrainingStore.getState().clearSession();
+    });
+    setTimeout(() => exitToTrainingHub(navigation), 0);
   }, [cancelWorkout, navigation, setWorkoutTimerPaused]);
 
   return (
     <View style={styles.container}>
-      {/* Hero image / exercise visual */}
-      <ImageBackground
-        source={{ uri: currentExercise?.image ?? FALLBACK_IMAGE }}
-        style={styles.videoCanvas}
-        imageStyle={styles.videoImage}
+      <Modal
+        visible={abandonModalVisible}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        presentationStyle="overFullScreen"
+        onRequestClose={() => setAbandonModalVisible(false)}
       >
+        <View
+          style={[
+            styles.abandonModalRoot,
+            { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 8 },
+          ]}
+        >
+          <Pressable
+            style={styles.abandonModalBackdrop}
+            onPress={() => setAbandonModalVisible(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Cerrar"
+          />
+          <View style={styles.abandonModalCard}>
+            <Text style={styles.abandonModalTitle}>Abandonar entrenamiento</Text>
+            <Text style={styles.abandonModalBody}>
+              ¿Querés cancelar la sesión? El progreso no se guardará.
+            </Text>
+            <View style={styles.abandonModalActions}>
+              <TouchableOpacity
+                style={styles.abandonBtnSecondary}
+                onPress={() => setAbandonModalVisible(false)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.abandonBtnSecondaryText}>Continuar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.abandonBtnDanger}
+                onPress={confirmAbandon}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.abandonBtnDangerText}>Abandonar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Hero: GIF/PNG from catálogo (expo-image anima GIF en iOS/Android) */}
+      <View style={styles.videoCanvas}>
+        <Image
+          source={{ uri: currentExercise?.image ?? FALLBACK_IMAGE }}
+          style={styles.videoImageFill}
+          contentFit="cover"
+          transition={200}
+        />
         <LinearGradient
           colors={['transparent', colors.bg]}
           style={styles.videoGradient}
@@ -164,7 +218,7 @@ export const EntrenamientoEnVivoScreen: React.FC<Props> = ({ navigation, route }
             </Text>
           </View>
         </View>
-      </ImageBackground>
+      </View>
 
       {/* Metrics panel */}
       <View style={styles.metricsContainer}>
@@ -225,6 +279,7 @@ export const EntrenamientoEnVivoScreen: React.FC<Props> = ({ navigation, route }
               <Image
                 source={{ uri: nextExercise.image }}
                 style={styles.nextImage}
+                contentFit="cover"
               />
             </View>
             <View style={styles.nextExerciseInfo}>
@@ -236,9 +291,23 @@ export const EntrenamientoEnVivoScreen: React.FC<Props> = ({ navigation, route }
         ) : null}
       </View>
 
-      {/* Control bar */}
-      <View style={styles.controlBar}>
-        <TouchableOpacity style={styles.controlButton} onPress={handleCancel} activeOpacity={0.7}>
+      {/* Control bar — zIndex + safe bottom so touches aren’t lost under home indicator / overlays */}
+      <View
+        style={[
+          styles.controlBar,
+          {
+            paddingBottom: Math.max(20, insets.bottom + 8),
+            zIndex: 100,
+            elevation: 24,
+          },
+        ]}
+      >
+        <TouchableOpacity
+          style={styles.controlButton}
+          onPress={handleCancel}
+          activeOpacity={0.7}
+          hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}
+        >
           <View style={styles.controlIconWrap}>
             <Ionicons name="close" size={22} color={colors.textSecondary} />
           </View>
@@ -300,8 +369,10 @@ const styles = StyleSheet.create({
   videoCanvas: {
     flex: 1,
     backgroundColor: colors.elevated,
+    overflow: 'hidden',
   },
-  videoImage: {
+  videoImageFill: {
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: colors.elevated,
   },
   videoGradient: {
@@ -569,6 +640,74 @@ const styles = StyleSheet.create({
   },
   disabledLabel: {
     color: 'rgba(255,255,255,0.2)',
+  },
+  abandonModalRoot: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  abandonModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.78)',
+  },
+  abandonModalCard: {
+    width: '100%',
+    maxWidth: 400,
+    marginHorizontal: 24,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    zIndex: 2,
+    elevation: 8,
+  },
+  abandonModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  abandonModalBody: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  abandonModalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 22,
+  },
+  abandonBtnSecondary: {
+    flex: 1,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  abandonBtnSecondaryText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  abandonBtnDanger: {
+    flex: 1,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,80,80,0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,120,120,0.45)',
+  },
+  abandonBtnDangerText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#ff8a80',
   },
   playButton: {
     width: 64,

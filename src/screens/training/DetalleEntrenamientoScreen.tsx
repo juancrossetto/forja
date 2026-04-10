@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -6,9 +6,9 @@ import {
   ScrollView,
   FlatList,
   TouchableOpacity,
-  Image,
   Platform,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTrainingStore } from '../../store/trainingStore';
@@ -25,49 +25,14 @@ const colors = {
   textTertiary: 'rgba(255,255,255,0.45)',
 };
 
-interface Exercise {
+interface ExerciseRow {
   id: string;
   number: string;
   name: string;
   sets: number;
-  reps: number;
+  reps: string;
   image: string;
 }
-
-const EXERCISES: Exercise[] = [
-  {
-    id: '1',
-    number: '01',
-    name: 'Press de Banca',
-    sets: 4,
-    reps: 10,
-    image: 'https://via.placeholder.com/200x150?text=Press+de+Banca',
-  },
-  {
-    id: '2',
-    number: '02',
-    name: 'Vuelos Laterales',
-    sets: 3,
-    reps: 15,
-    image: 'https://via.placeholder.com/200x150?text=Vuelos+Laterales',
-  },
-  {
-    id: '3',
-    number: '03',
-    name: 'Extensión Tríceps',
-    sets: 3,
-    reps: 12,
-    image: 'https://via.placeholder.com/200x150?text=Extension+Triceps',
-  },
-  {
-    id: '4',
-    number: '04',
-    name: '+ 5 Ejercicios más',
-    sets: 0,
-    reps: 0,
-    image: '',
-  },
-];
 
 const HERO_IMAGE =
   'https://images.unsplash.com/photo-1574680178050-55a41cebbe7f?q=80&w=400';
@@ -79,31 +44,81 @@ interface Props {
 
 export const DetalleEntrenamientoScreen: React.FC<Props> = ({ navigation, route }) => {
   const { trainingId, trainingName } = route.params ?? {};
-  const { startWorkout, getWorkoutById } = useTrainingStore();
+  const startWorkout = useTrainingStore((s) => s.startWorkout);
+  const hydrateWorkoutExercisesFromCatalog = useTrainingStore(
+    (s) => s.hydrateWorkoutExercisesFromCatalog,
+  );
+  const workout = useTrainingStore((s) =>
+    trainingId ? s.workouts.find((w) => w.id === trainingId) : undefined,
+  );
   const insets = useSafeAreaInsets();
+  const [isStarting, setIsStarting] = useState(false);
 
-  const workout = getWorkoutById(trainingId);
-  const exercises = workout?.exercises ?? EXERCISES;
+  useEffect(() => {
+    if (trainingId) {
+      void hydrateWorkoutExercisesFromCatalog(trainingId);
+    }
+  }, [trainingId, hydrateWorkoutExercisesFromCatalog]);
+
+  const exerciseRows = useMemo((): ExerciseRow[] => {
+    const list = workout?.exercises ?? [];
+    if (!list.length) {
+      return [
+        {
+          id: 'empty',
+          number: '—',
+          name: 'Sin bloques en esta sesión',
+          sets: 0,
+          reps: '—',
+          image: HERO_IMAGE,
+        },
+      ];
+    }
+    const total = list.length;
+    return list.map((ex, i) => ({
+      id: ex.id,
+      number: `${String(i + 1).padStart(2, '0')} / ${String(total).padStart(2, '0')}`,
+      name: ex.name,
+      sets: ex.sets,
+      reps: String(ex.reps),
+      image: ex.image || HERO_IMAGE,
+    }));
+  }, [workout]);
+
+  const typeLabel =
+    workout?.type === 'cardio'
+      ? 'Cardio'
+      : workout?.type === 'descanso'
+        ? 'Descanso'
+        : 'Fuerza';
+
+  const heroUri =
+    exerciseRows.find((r) => r.id !== 'empty')?.image ?? HERO_IMAGE;
 
   // Tab bar height: 60px items + 24px paddingBottom (iOS) or 12px (Android)
   const TAB_BAR_HEIGHT = 60 + (Platform.OS === 'ios' ? 24 : 12);
   const buttonBottom = insets.bottom + TAB_BAR_HEIGHT;
 
-  const handleIniciar = () => {
-    // Fire-and-forget: create the Supabase record in background
-    startWorkout(trainingId).catch(console.error);
-    // Navigate immediately — EntrenamientoEnVivo handles missing sessionLogId gracefully
+  const handleIniciar = async () => {
+    if (isStarting) return;
+    setIsStarting(true);
+    try {
+      await startWorkout(trainingId);
+    } catch (e) {
+      console.error('handleIniciar:', e);
+    }
     navigation.navigate('EntrenamientoEnVivo', {
       trainingId: trainingId ?? '',
       trainingName: trainingName ?? workout?.title ?? 'Entrenamiento',
     });
+    setIsStarting(false);
   };
 
-  const renderExerciseCard = ({ item, index }: { item: Exercise; index: number }) => {
-    if (index === 3) {
+  const renderExerciseCard = ({ item }: { item: ExerciseRow }) => {
+    if (item.id === 'empty') {
       return (
         <View style={styles.exercisePlaceholder}>
-          <Text style={styles.placeholderText}>+ 5 Ejercicios más</Text>
+          <Text style={styles.placeholderText}>{item.name}</Text>
         </View>
       );
     }
@@ -116,16 +131,18 @@ export const DetalleEntrenamientoScreen: React.FC<Props> = ({ navigation, route 
         <Image
           source={{ uri: item.image }}
           style={styles.exerciseThumbnail}
+          contentFit="cover"
+          transition={150}
         />
         <View style={styles.exerciseOverlay}>
           <Text style={styles.playIcon}>▶</Text>
         </View>
 
         <View style={styles.exerciseInfo}>
-          <Text style={styles.exerciseNumber}>{item.number} / 08</Text>
+          <Text style={styles.exerciseNumber}>{item.number}</Text>
           <Text style={styles.exerciseName}>{item.name}</Text>
           <Text style={styles.exerciseMeta}>
-            {item.sets} Series x {item.reps} Reps
+            {item.sets} series × {item.reps} reps
           </Text>
         </View>
       </TouchableOpacity>
@@ -142,8 +159,10 @@ export const DetalleEntrenamientoScreen: React.FC<Props> = ({ navigation, route 
         {/* Hero Section */}
         <View style={styles.heroContainer}>
           <Image
-            source={{ uri: HERO_IMAGE }}
+            source={{ uri: heroUri }}
             style={styles.heroImage}
+            contentFit="cover"
+            transition={200}
           />
           <LinearGradient
             colors={['transparent', colors.bg]}
@@ -153,24 +172,30 @@ export const DetalleEntrenamientoScreen: React.FC<Props> = ({ navigation, route 
           <View style={styles.heroContent}>
             <View style={styles.tagsRow}>
               <View style={styles.tag}>
-                <Text style={styles.tagText}>Fuerza</Text>
+                <Text style={styles.tagText}>{typeLabel}</Text>
               </View>
               <View style={styles.tagSecondary}>
-                <Text style={styles.tagTextSecondary}>Día 12</Text>
+                <Text style={styles.tagTextSecondary}>Plan activo</Text>
               </View>
             </View>
 
-            <Text style={styles.heroTitle}>Empuje Radical</Text>
+            <Text style={styles.heroTitle}>
+              {(trainingName ?? workout?.title ?? 'Entrenamiento').toUpperCase()}
+            </Text>
 
             <View style={styles.heroMeta}>
               <View style={styles.metaItem}>
                 <Text style={styles.metaLabel}>Duración</Text>
-                <Text style={styles.metaValue}>45 MIN</Text>
+                <Text style={styles.metaValue}>
+                  {workout?.duration ?? 45} MIN
+                </Text>
               </View>
               <View style={styles.metaDivider} />
               <View style={styles.metaItem}>
                 <Text style={styles.metaLabel}>Ejercicios</Text>
-                <Text style={styles.metaValue}>8 BLOQUES</Text>
+                <Text style={styles.metaValue}>
+                  {workout?.exercises?.length ?? 0} BLOQUES
+                </Text>
               </View>
             </View>
           </View>
@@ -196,12 +221,10 @@ export const DetalleEntrenamientoScreen: React.FC<Props> = ({ navigation, route 
           <Text style={styles.sectionTitle}>Contenido del Entrenamiento</Text>
 
           <FlatList
-            data={EXERCISES}
+            data={exerciseRows}
             renderItem={renderExerciseCard}
             keyExtractor={(item) => item.id}
-            numColumns={2}
             scrollEnabled={false}
-            columnWrapperStyle={styles.exerciseGrid}
             contentContainerStyle={styles.exercisesList}
           />
         </View>
@@ -210,20 +233,20 @@ export const DetalleEntrenamientoScreen: React.FC<Props> = ({ navigation, route 
         <View style={styles.statsSection}>
           <View style={styles.statCard}>
             <Text style={styles.statIcon}>🔥</Text>
-            <Text style={styles.statValue}>340</Text>
-            <Text style={styles.statLabel}>Kcal</Text>
+            <Text style={styles.statValue}>{workout?.calories ?? '—'}</Text>
+            <Text style={styles.statLabel}>Kcal est.</Text>
           </View>
 
           <View style={styles.statCard}>
             <Text style={styles.statIcon}>❤️</Text>
-            <Text style={styles.statValue}>145</Text>
-            <Text style={styles.statLabel}>BPM Med.</Text>
+            <Text style={styles.statValue}>—</Text>
+            <Text style={styles.statLabel}>BPM</Text>
           </View>
 
           <View style={styles.statCard}>
             <Text style={styles.statIcon}>🎯</Text>
-            <Text style={styles.statValue}>ALTO</Text>
-            <Text style={styles.statLabel}>Enfoque</Text>
+            <Text style={styles.statValue}>{workout?.blocks ?? '—'}</Text>
+            <Text style={styles.statLabel}>Bloques</Text>
           </View>
         </View>
 
@@ -234,12 +257,15 @@ export const DetalleEntrenamientoScreen: React.FC<Props> = ({ navigation, route 
       {/* Fixed Button */}
       <View style={[styles.fixedButtonContainer, { bottom: buttonBottom }]}>
         <TouchableOpacity
-          style={styles.startButton}
+          style={[styles.startButton, isStarting && styles.startButtonLoading]}
           onPress={handleIniciar}
+          disabled={isStarting}
           activeOpacity={0.85}
         >
-          <Text style={styles.startButtonText}>Iniciar Entrenamiento</Text>
-          <Text style={styles.playArrow}>▶</Text>
+          <Text style={styles.startButtonText}>
+            {isStarting ? 'Preparando...' : 'Iniciar Entrenamiento'}
+          </Text>
+          <Text style={styles.playArrow}>{isStarting ? '⏳' : '▶'}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -389,11 +415,8 @@ const styles = StyleSheet.create({
   exercisesList: {
     gap: 16,
   },
-  exerciseGrid: {
-    gap: 16,
-  },
   exerciseCard: {
-    flex: 1,
+    width: '100%',
     backgroundColor: colors.surface,
     borderRadius: 8,
     overflow: 'hidden',
@@ -418,6 +441,7 @@ const styles = StyleSheet.create({
   },
   exerciseInfo: {
     flex: 1,
+    minWidth: 0,
     paddingHorizontal: 16,
     paddingVertical: 12,
     justifyContent: 'center',
@@ -436,7 +460,8 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     textTransform: 'uppercase',
     marginBottom: 4,
-    lineHeight: 18,
+    lineHeight: 20,
+    flexShrink: 1,
   },
   exerciseMeta: {
     fontSize: 10,
@@ -512,6 +537,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 24,
+  },
+  startButtonLoading: {
+    opacity: 0.65,
   },
   startButtonText: {
     fontSize: 16,

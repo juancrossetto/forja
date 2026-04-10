@@ -45,6 +45,14 @@ export interface Workout {
   blocks: number;
   calories: number;
   exercises: Exercise[];
+  /** Body parts to load from Supabase catalog (e.g. ['chest', 'back']) */
+  bodyParts?: string[];
+  /** How many exercises to pick from the catalog */
+  exerciseCount?: number;
+  /** Default sets for catalog exercises */
+  defaultSets?: number;
+  /** Default reps for catalog exercises */
+  defaultReps?: string;
 }
 
 // Training Session
