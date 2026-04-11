@@ -17,6 +17,7 @@ import {
   getMeasurementsForDate,
   saveMeasurements,
 } from '../../services/measurementsService';
+import { useProgressStore } from '../../store/progressStore';
 
 const BODY_IMAGES = {
   male:   require('../../../assets/male.png'),
@@ -69,6 +70,7 @@ const todayISO = () => new Date().toISOString().split('T')[0];
 const PesoYMedidasScreen: React.FC = () => {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const loadProgressData = useProgressStore((s) => s.loadProgressData);
   const [gender, setGender]       = useState<'male' | 'female'>('male');
   const [weight, setWeight]       = useState('');
   const [bodyFat, setBodyFat]     = useState('');
@@ -99,26 +101,40 @@ const PesoYMedidasScreen: React.FC = () => {
   const updateMeasurement = (id: string, value: string) =>
     setMeasurements((prev) => prev.map((m) => (m.id === id ? { ...m, value } : m)));
 
-  const canSave = parseFloat(weight) > 0;
+  const toNum = (s: string) => parseFloat(s.replace(',', '.'));
+  const canSave = toNum(weight) > 0;
 
   const handleSave = async () => {
     setWeightTouched(true);
-    if (!canSave) return;
+    if (!canSave) {
+      Alert.alert('Peso requerido', 'Ingresá tu peso actual para continuar.');
+      return;
+    }
     setSaving(true);
-    const get = (id: string) => {
-      const n = parseFloat(measurements.find((m) => m.id === id)?.value ?? '');
-      return isNaN(n) ? null : n;
-    };
-    const ok = await saveMeasurements({
-      gender,
-      weight_kg:    parseFloat(weight) || null,
-      body_fat_pct: parseFloat(bodyFat) || null,
-      chest_cm: get('chest'), waist_cm: get('waist'),
-      hips_cm:  get('hips'),  arms_cm:  get('arms'), legs_cm: get('legs'),
-    });
-    setSaving(false);
-    if (ok) Alert.alert('Guardado', 'Tu registro fue guardado correctamente.');
-    else    Alert.alert('Error', 'No se pudo guardar. Verificá tu conexión.');
+    try {
+      const get = (id: string) => {
+        const n = toNum(measurements.find((m) => m.id === id)?.value ?? '');
+        return isNaN(n) ? null : n;
+      };
+      const ok = await saveMeasurements({
+        gender,
+        weight_kg:    toNum(weight) || null,
+        body_fat_pct: toNum(bodyFat) || null,
+        chest_cm: get('chest'), waist_cm: get('waist'),
+        hips_cm:  get('hips'),  arms_cm:  get('arms'), legs_cm: get('legs'),
+      });
+      if (ok) {
+        void loadProgressData();
+        navigation.goBack();
+      } else {
+        Alert.alert('Error', 'No se pudo guardar. Verificá tu conexión e intentá de nuevo.');
+      }
+    } catch (e) {
+      console.error('handleSave:', e);
+      Alert.alert('Error', 'Ocurrió un error inesperado al guardar.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const selectedLabel = measurements.find((m) => m.id === selectedId)?.label ?? '';

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,556 +6,676 @@ import {
   ScrollView,
   TouchableOpacity,
   Dimensions,
-  ImageBackground,
 } from 'react-native';
+import Svg, { Path, Circle, Rect, Polygon } from 'react-native-svg';
+import { useProgressStore } from '../../store/progressStore';
 
 const { width } = Dimensions.get('window');
+const CARD_PADDING = 16;
+const HALF = (width - CARD_PADDING * 2 - 8) / 2;
 
-const COLORS = {
+const C = {
   bg: '#0e0e0e',
-  surface: '#1a1a1a',
-  surfaceHigh: '#20201f',
-  surfaceHighest: '#262626',
+  surface: '#161616',
+  surfaceMid: '#1e1e1e',
+  surfaceHigh: '#262626',
   primary: '#D1FF26',
-  primaryDim: '#c1ed00',
+  primaryDim: '#b8e020',
   secondary: '#00e3fd',
-  secondaryDim: '#00d4ec',
-  tertiary: '#ff734a',
-  tertiaryFixed: '#ff9475',
+  orange: '#ff734a',
   text: '#ffffff',
-  textVariant: '#adaaaa',
-  errorDim: '#d53d18',
+  muted: '#888888',
+  mutedLo: '#555555',
 };
 
-const ProgresoScreen: React.FC = () => {
+interface Props {
+  navigation: any;
+}
+
+const ProgresoScreen: React.FC<Props> = ({ navigation }) => {
+  const loadProgressData = useProgressStore((s) => s.loadProgressData);
+  const measurements = useProgressStore((s) => s.measurements);
+  const todayWorkouts = useProgressStore((s) => s.todayWorkouts);
+  const todayHydration = useProgressStore((s) => s.todayHydration);
+
+  useEffect(() => {
+    void loadProgressData();
+  }, [loadProgressData]);
+
+  const latestM = measurements[0] ?? null;
+  const prevM = measurements[1] ?? null;
+
+  const weight = latestM?.weight_kg ?? null;
+  const prevWeight = prevM?.weight_kg ?? null;
+  const weightChange =
+    weight != null && prevWeight != null
+      ? parseFloat((weight - prevWeight).toFixed(1))
+      : null;
+
+  const bodyFat = latestM?.body_fat_pct ?? null;
+  const leanMass =
+    weight != null && bodyFat != null
+      ? parseFloat((weight * (1 - bodyFat / 100)).toFixed(1))
+      : null;
+
+  const hydrationMl = todayHydration?.total_ml ?? 0;
+  const hydrationGoalMl = todayHydration?.goal_ml ?? 3000;
+  const hydrationPct = Math.min(100, Math.round((hydrationMl / hydrationGoalMl) * 100));
+
+  const workoutPct = todayWorkouts.length > 0 ? 100 : 0;
+
+  // Sparkline – oldest to newest
+  const sparklineEntries = useMemo(
+    () => [...measurements].reverse().slice(-7),
+    [measurements],
+  );
+  const sparklineWeights = sparklineEntries.map((m) => m.weight_kg ?? 0).filter((w) => w > 0);
+  const sparkMin = sparklineWeights.length ? Math.min(...sparklineWeights) : 0;
+  const sparkMax = sparklineWeights.length ? Math.max(...sparklineWeights) : 1;
+  const sparkRange = sparkMax - sparkMin || 1;
+  const sparkHeights = sparklineWeights.map(
+    (w) => 20 + ((w - sparkMin) / sparkRange) * 60,
+  );
+
+  const weightDisplay = weight != null ? weight.toFixed(1) : '—';
+  const weightChangeDisplay =
+    weightChange != null
+      ? `${weightChange > 0 ? '+' : ''}${weightChange} kg`
+      : null;
+  const weightChangeBg =
+    weightChange == null
+      ? C.mutedLo
+      : weightChange < 0
+        ? C.primaryDim
+        : C.orange;
+
   return (
-    <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerSubtitle}>Metrics & Analytics</Text>
-          <View>
-            <Text style={styles.headerTitle}>PROGRESO</Text>
-            <Text style={[styles.headerTitle, { color: COLORS.secondary }]}>
-              ESTADÍSTICO
-            </Text>
-          </View>
-          <View style={styles.headerDivider} />
+    <View style={s.root}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
+        {/* ── Header ─────────────────────────────────────────────── */}
+        <View style={s.header}>
+          <Text style={s.headerEyebrow}>
+            <Text style={{ color: C.text }}>TU </Text>
+            <Text style={{ color: C.primary }}>PROGRESO</Text>
+          </Text>
+          <Text style={s.headerSub}>SEMANA 12 · FASE DE TRANSFORMACIÓN</Text>
         </View>
 
-        {/* Bento Grid */}
-        <View style={styles.bentoGrid}>
-          {/* Large: Body Weight */}
-          <View style={[styles.gridItem, styles.gridLarge]}>
-            <View style={styles.cardContent}>
-              <Text style={styles.largeLabelIcon}>⚖️</Text>
-              <Text style={styles.cardTitle}>Body Weight</Text>
-              <View style={styles.largeValueContainer}>
-                <Text style={styles.largeValue}>74.2</Text>
-                <Text style={styles.largeUnit}>KG</Text>
+        {/* ── Peso Corporal ───────────────────────────────────────── */}
+        <View style={[s.card, { marginHorizontal: CARD_PADDING }]}>
+          <View style={s.row}>
+            <Text style={s.cardLabel}>PESO CORPORAL</Text>
+            {weightChangeDisplay != null && (
+              <View style={s.changeBadge}>
+                <IconTrendDown color="#000" size={12} />
+                <Text style={s.changeBadgeText}>{weightChangeDisplay}</Text>
               </View>
-            </View>
-            {/* Sparkline */}
-            <View style={styles.sparklineContainer}>
-              <View style={[styles.sparklineBar, { height: '60%' }]} />
-              <View style={[styles.sparklineBar, { height: '55%' }]} />
-              <View style={[styles.sparklineBar, { height: '65%' }]} />
-              <View style={[styles.sparklineBar, { height: '70%' }]} />
-              <View style={[styles.sparklineBar, { height: '62%', opacity: 0.6 }]} />
-              <View style={[styles.sparklineBar, { height: '45%', opacity: 0.4 }]} />
-            </View>
+            )}
           </View>
-
-          {/* Steps Today */}
-          <View
-            style={[
-              styles.gridItem,
-              styles.gridMedium,
-              {
-                backgroundColor: COLORS.surfaceHighest,
-                borderLeftWidth: 4,
-                borderLeftColor: COLORS.secondary,
-              },
-            ]}
-          >
-            <Text style={styles.cardTitle}>Steps Today</Text>
-            <Text style={styles.cardValue}>12,482</Text>
-            <View style={styles.progressBar}>
-              <View style={[styles.progressFill, { width: '82%' }]} />
-            </View>
-            <Text style={styles.progressLabel}>82% GOAL</Text>
+          <View style={s.weightRow}>
+            <Text style={s.weightValue}>{weightDisplay}</Text>
+            <Text style={s.weightUnit}>kg</Text>
           </View>
-
-          {/* Photos Gallery */}
-          <ImageBackground
-            source={{
-              uri: 'https://via.placeholder.com/300x300',
-            }}
-            style={[styles.gridItem, styles.gridLarge]}
-            imageStyle={{ opacity: 0.5 }}
-          >
-            <View style={styles.photoOverlay} />
-            <View style={styles.photoContent}>
-              <Text style={styles.photoLabel}>Evolution Gallery</Text>
-              <Text style={styles.photoTitle}>Última Foto</Text>
-              <View style={styles.photoDate}>
-                <Text style={styles.photoDateIcon}>📅</Text>
-                <Text style={styles.photoDateText}>24 OCT, 2023</Text>
-              </View>
-            </View>
-          </ImageBackground>
-
-          {/* Sleep Quality */}
-          <View style={[styles.gridItem, styles.gridMedium]}>
-            <View style={styles.sleepHeader}>
-              <Text style={styles.cardTitle}>Sleep Quality</Text>
-              <Text style={styles.sleepIcon}>😴</Text>
-            </View>
-            <Text style={styles.cardValue}>7h 45m</Text>
-            <View style={styles.sleepBars}>
-              <View style={styles.sleepBar} />
-              <View style={styles.sleepBar} />
-              <View style={styles.sleepBar} />
-              <View style={[styles.sleepBar, { opacity: 0.2 }]} />
-            </View>
-          </View>
-
-          {/* Caloric Intake */}
-          <View style={[styles.gridItem, styles.gridMedium]}>
-            <Text style={styles.cardTitle}>Caloric Intake</Text>
-            <View style={styles.caloricContent}>
-              <Text style={styles.caloricValue}>2,150</Text>
-              <View style={styles.caloricRemaining}>
-                <Text style={styles.caloricRemainingLabel}>Remaining</Text>
-                <Text style={[styles.caloricRemainingValue, { color: COLORS.secondary }]}>
-                  450 KCAL
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Active Burn */}
-          <View style={[styles.gridItem, styles.gridMedium]}>
-            <Text style={styles.cardTitle}>Active Burn</Text>
-            <View style={styles.burnContent}>
-              <View style={styles.burnIcon}>
-                <Text style={styles.burnIconText}>🔥</Text>
-              </View>
-              <View>
-                <Text style={styles.cardValue}>842</Text>
-                <Text style={styles.burnUnit}>KCAL</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Body Fat % */}
-          <View
-            style={[
-              styles.gridItem,
-              styles.gridMedium,
-              { backgroundColor: COLORS.surfaceHighest },
-            ]}
-          >
-            <Text style={styles.cardTitle}>Body Fat %</Text>
-            <View style={styles.bodyFatContent}>
-              <Text style={[styles.largeValue, { color: COLORS.tertiary }]}>
-                14.2%
-              </Text>
-              <Text style={[styles.bodyFatChange, { color: COLORS.errorDim }]}>
-                -0.4% WK
-              </Text>
-            </View>
-          </View>
-
-          {/* Blood Pressure */}
-          <View style={[styles.gridItem, styles.gridMedium]}>
-            <Text style={styles.cardTitle}>Blood Pressure</Text>
-            <View style={styles.bpContent}>
-              <Text style={styles.cardValue}>118/76</Text>
-              <View style={styles.bpStatus}>
-                <Text style={styles.bpStatusText}>OPTIMAL</Text>
-              </View>
-            </View>
-            <View style={styles.bpChart}>
-              <View style={[styles.bpBar, { height: 16 }]} />
-              <View style={[styles.bpBar, { height: 20 }]} />
-              <View style={[styles.bpBar, { height: 12 }]} />
-              <View style={[styles.bpBar, { height: 24 }]} />
-              <View style={[styles.bpBar, { height: 16, opacity: 1 }]} />
-            </View>
-          </View>
-
-          {/* Lean Body Mass */}
-          <View style={[styles.gridItem, styles.gridMedium]}>
-            <Text style={styles.cardTitle}>Lean Body Mass</Text>
-            <View style={styles.lbmContent}>
-              <View style={styles.lbmValue}>
-                <Text style={styles.largeValue}>63.8</Text>
-                <Text style={styles.lbmUnit}>KG</Text>
-              </View>
-              <Text style={[styles.lbmGain, { color: COLORS.primaryDim }]}>
-                +1.2 KG EST. GAIN
-              </Text>
-            </View>
+          {/* Sparkline */}
+          <View style={s.sparkline}>
+            {sparkHeights.length > 0
+              ? sparkHeights.map((h, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      s.sparkBar,
+                      {
+                        height: `${Math.round(h)}%`,
+                        backgroundColor:
+                          i === sparkHeights.length - 1 ? C.primary : C.primaryDim,
+                        opacity: i === sparkHeights.length - 1 ? 1 : 0.35,
+                      },
+                    ]}
+                  />
+                ))
+              : [40, 55, 35, 60, 45, 70, 50].map((h, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      s.sparkBar,
+                      {
+                        height: `${h}%`,
+                        opacity: i === 6 ? 0.5 : 0.15,
+                      },
+                    ]}
+                  />
+                ))}
           </View>
         </View>
 
-        <View style={styles.bottomSpacer} />
+        {/* ── Resumen de Metas ────────────────────────────────────── */}
+        <View style={[s.card, { marginHorizontal: CARD_PADDING, marginTop: 12 }]}>
+          <View style={s.row}>
+            <Text style={s.cardLabel}>RESUMEN DE METAS</Text>
+            <View style={s.todayBadge}>
+              <Text style={s.todayBadgeText}>HOY</Text>
+            </View>
+          </View>
+
+          <GoalBar icon="training" label="ENTRENAMIENTO" pct={workoutPct} color={C.primary} />
+          <GoalBar icon="nutrition" label="NUTRICIÓN" pct={0} color={C.primary} />
+          <GoalBar icon="hydration" label="HIDRATACIÓN" pct={hydrationPct} color={C.primary} />
+        </View>
+
+        {/* ── Pasos + Descanso ────────────────────────────────────── */}
+        <View style={[s.row, { marginHorizontal: CARD_PADDING, marginTop: 12, gap: 8 }]}>
+          <View style={[s.card, { flex: 1 }]}>
+            <View style={s.row}>
+              <IconSteps color={C.secondary} />
+              <Text style={[s.cardLabel, { marginLeft: 6 }]}>PASOS</Text>
+            </View>
+            <Text style={s.halfValue}>—</Text>
+            <Text style={s.halfMeta}>META: 10,000</Text>
+          </View>
+          <View style={[s.card, { flex: 1 }]}>
+            <View style={s.row}>
+              <IconMoon color={C.orange} />
+              <Text style={[s.cardLabel, { marginLeft: 6 }]}>DESCANSO</Text>
+            </View>
+            <Text style={s.halfValue}>—</Text>
+            <Text style={s.halfMeta}>CALIDAD: —</Text>
+          </View>
+        </View>
+
+        {/* ── Calorías ────────────────────────────────────────────── */}
+        <View style={[s.card, s.caloriesCard, { marginHorizontal: CARD_PADDING, marginTop: 12 }]}>
+          {/* Left */}
+          <View style={s.caloriesLeft}>
+            <View style={s.row}>
+              <IconFire color={C.primary} size={18} />
+              <Text style={[s.cardLabel, { marginLeft: 6 }]}>CALORÍAS DIARIAS</Text>
+            </View>
+            <View style={[s.row, { alignItems: 'baseline', marginTop: 8 }]}>
+              <Text style={s.caloriesValue}>—</Text>
+              <Text style={s.caloriesUnit}>kcal</Text>
+            </View>
+          </View>
+
+          {/* Divider */}
+          <View style={s.caloriesDivider} />
+
+          {/* Right */}
+          <View style={s.caloriesRight}>
+            <Text style={s.cardLabel}>FALTAN</Text>
+            <Text style={s.caloriesRemaining}>—</Text>
+          </View>
+        </View>
+
+        {/* ── Galería Evolución ───────────────────────────────────── */}
+        <View style={{ marginHorizontal: CARD_PADDING, marginTop: 20 }}>
+          <View style={s.galleryHeader}>
+            <View>
+              <Text style={s.galleryTitle}>GALERÍA EVOLUCIÓN</Text>
+              <Text style={s.gallerySub}>VISUALIZA TU TRANSFORMACIÓN</Text>
+            </View>
+            <View style={s.row}>
+              <TouchableOpacity style={s.navBtn}>
+                <Text style={s.navBtnText}>‹</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.navBtn}>
+                <Text style={s.navBtnText}>›</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Tab row */}
+          <View style={s.photoTabs}>
+            {['FRENTE', 'PERFIL', 'ESPALDA'].map((t, i) => (
+              <View key={t} style={[s.photoTab, i === 0 && s.photoTabActive]}>
+                <Text style={[s.photoTabText, i === 0 && s.photoTabTextActive]}>{t}</Text>
+              </View>
+            ))}
+          </View>
+
+          {/* Photo placeholder */}
+          <View style={s.photoPlaceholder}>
+            <Text style={s.photoPlaceholderText}>SIN FOTOS</Text>
+            <TouchableOpacity
+              style={s.addPhotoBtn}
+              onPress={() => navigation.navigate('CargarFotos')}
+            >
+              <Text style={s.addPhotoBtnText}>+ Agregar foto</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={{ height: 120 }} />
       </ScrollView>
 
-      {/* FABs */}
-      <View style={styles.fabContainer}>
-        <TouchableOpacity style={styles.fab}>
-          <Text style={styles.fabIcon}>📷</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.fabPrimary}>
-          <Text style={styles.fabPrimaryIcon}>➕</Text>
-          <Text style={styles.fabPrimaryText}>Registrar</Text>
-        </TouchableOpacity>
+      {/* ── FAB Registrar ───────────────────────────────────────── */}
+      <TouchableOpacity
+        style={s.fab}
+        onPress={() => navigation.navigate('PesoYMedidas')}
+      >
+        <Text style={s.fabText}>+ Registrar</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+/* ── SVG Icon components ─────────────────────────────────────────── */
+const IconLightning: React.FC<{ color: string; size?: number }> = ({ color, size = 16 }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Polygon points="13,2 5,14 11,14 9,22 19,9 13,9" fill={color} />
+  </Svg>
+);
+
+const IconFork: React.FC<{ color: string; size?: number }> = ({ color, size = 16 }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M6 2v6c0 1.66 1.34 3 3 3v9a1 1 0 002 0v-9c1.66 0 3-1.34 3-3V2h-2v5H9V2H6zm9 0v20a1 1 0 002 0V14h2V2h-4z"
+      fill={color}
+    />
+  </Svg>
+);
+
+const IconDrop: React.FC<{ color: string; size?: number }> = ({ color, size = 16 }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M12 2L6 10.5C6 13.538 8.686 16 12 16s6-2.462 6-5.5L12 2z" fill={color} />
+  </Svg>
+);
+
+const IconFire: React.FC<{ color: string; size?: number }> = ({ color, size = 16 }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M12 2C10 6 7 8 7 12c0 2.76 2.24 5 5 5s5-2.24 5-5c0-1.5-.5-2.8-1.3-3.9C14.5 9.5 13 11 12 11c1-2.5.5-6 0-9z"
+      fill={color}
+    />
+  </Svg>
+);
+
+const IconSteps: React.FC<{ color: string; size?: number }> = ({ color, size = 14 }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M13.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm4.5 8.75l-1.8-1.8a1 1 0 00-.7-.3H10l-.95-4.4C8.84 6.8 8 6 7 6H4v2h3l2.6 11H12l-.95-4.25 2.45 2.5V22h2v-5.5l-2.5-2.5.5-2.5 1.5 1.5H20v-2h-2z"
+      fill={color}
+    />
+  </Svg>
+);
+
+const IconMoon: React.FC<{ color: string; size?: number }> = ({ color, size = 14 }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M12 3a9 9 0 109 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 01-4.4 2.26 5.403 5.403 0 01-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"
+      fill={color}
+    />
+  </Svg>
+);
+
+const IconTrendDown: React.FC<{ color: string; size?: number }> = ({ color, size = 12 }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M3 7l6 6 4-4 8 8" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M17 21h4v-4" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const IconGear: React.FC<{ color: string; size?: number }> = ({ color, size = 20 }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96a6.97 6.97 0 00-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.37 1.04.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.57 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"
+      fill={color}
+    />
+  </Svg>
+);
+
+type GoalIconType = 'training' | 'nutrition' | 'hydration';
+
+/* ── Goal bar sub-component ──────────────────────────────────────── */
+const GoalBar: React.FC<{
+  icon: GoalIconType;
+  label: string;
+  pct: number;
+  color: string;
+}> = ({ icon, label, pct, color }) => {
+  const IconComp =
+    icon === 'training'
+      ? IconLightning
+      : icon === 'nutrition'
+        ? IconFork
+        : IconDrop;
+
+  return (
+    <View style={gb.row}>
+      <View style={[gb.iconWrap, { backgroundColor: `${color}18` }]}>
+        <IconComp color={color} size={14} />
+      </View>
+      <View style={gb.body}>
+        <View style={gb.labelRow}>
+          <Text style={gb.label}>{label}</Text>
+          <Text style={[gb.pct, { color }]}>{pct}%</Text>
+        </View>
+        <View style={gb.track}>
+          <View style={[gb.fill, { width: `${pct}%`, backgroundColor: color }]} />
+        </View>
       </View>
     </View>
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.bg,
-  },
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 16,
-  },
-  headerSubtitle: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: COLORS.primaryDim,
-    letterSpacing: 0.5,
-    marginBottom: 8,
-  },
-  headerTitle: {
-    fontSize: 48,
-    fontWeight: '700',
-    color: COLORS.text,
-    letterSpacing: -1,
-    lineHeight: 52,
-  },
-  headerDivider: {
-    height: 2,
-    width: 24,
-    backgroundColor: COLORS.primaryDim,
-    marginTop: 8,
-  },
-  bentoGrid: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    gap: 12,
+const gb = StyleSheet.create({
+  row: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
+    marginTop: 14,
+    gap: 10,
   },
-  gridItem: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: 16,
+  iconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  body: {
+    flex: 1,
+  },
+  labelRow: {
+    flexDirection: 'row',
     justifyContent: 'space-between',
+    marginBottom: 6,
   },
-  gridLarge: {
-    width: (width - 48) * 0.48,
-    height: 280,
+  label: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#888',
+    letterSpacing: 0.8,
   },
-  gridMedium: {
-    width: (width - 48) * 0.48,
-    height: 140,
+  pct: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
-  cardContent: {
+  track: {
+    height: 4,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  fill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+});
+
+/* ── Styles ──────────────────────────────────────────────────────── */
+const s = StyleSheet.create({
+  root: {
     flex: 1,
+    backgroundColor: C.bg,
   },
-  cardTitle: {
+  scroll: {
+    paddingTop: 48,
+  },
+
+  // Header
+  header: {
+    paddingHorizontal: CARD_PADDING,
+    marginBottom: 20,
+  },
+  headerEyebrow: {
+    fontSize: 44,
+    fontWeight: '900',
+    letterSpacing: -1,
+    lineHeight: 46,
+  },
+  headerSub: {
     fontSize: 10,
     fontWeight: '600',
-    color: COLORS.textVariant,
-    letterSpacing: 0.5,
-    marginBottom: 12,
+    color: C.muted,
+    letterSpacing: 0.8,
+    marginTop: 6,
   },
-  cardValue: {
-    fontSize: 28,
+  // Shared
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  card: {
+    backgroundColor: C.surface,
+    borderRadius: 14,
+    padding: 16,
+  },
+  cardLabel: {
+    fontSize: 10,
     fontWeight: '700',
-    color: COLORS.text,
+    color: C.muted,
+    letterSpacing: 0.8,
+    flex: 1,
   },
-  cardUnit: {
-    fontSize: 12,
-    color: COLORS.textVariant,
-    marginLeft: 4,
+
+  // Weight card
+  changeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: C.primary,
   },
-  valueContainer: {
+  changeBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#000',
+  },
+  weightRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
     marginTop: 8,
+    gap: 6,
   },
-  largeLabelIcon: {
-    fontSize: 24,
-    marginBottom: 8,
+  weightValue: {
+    fontSize: 64,
+    fontWeight: '900',
+    color: C.text,
+    letterSpacing: -2,
+    lineHeight: 68,
   },
-  largeValue: {
-    fontSize: 56,
-    fontWeight: '700',
-    color: COLORS.text,
-    lineHeight: 60,
+  weightUnit: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: C.muted,
+    marginBottom: 4,
   },
-  largeUnit: {
-    fontSize: 12,
-    color: COLORS.textVariant,
-    marginLeft: 8,
-  },
-  largeValueContainer: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginTop: 8,
-  },
-  sparklineContainer: {
+  sparkline: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 4,
-    marginTop: 16,
-    height: 80,
-  },
-  sparklineBar: {
-    flex: 1,
-    backgroundColor: COLORS.primaryDim,
-    borderTopLeftRadius: 2,
-    borderTopRightRadius: 2,
-    opacity: 0.4,
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: `${COLORS.text}15`,
-    borderRadius: 2,
+    height: 64,
     marginTop: 12,
-    overflow: 'hidden',
   },
-  progressFill: {
-    height: '100%',
-    backgroundColor: COLORS.secondary,
-    borderRadius: 2,
+  sparkBar: {
+    flex: 1,
+    backgroundColor: C.primaryDim,
+    borderTopLeftRadius: 3,
+    borderTopRightRadius: 3,
   },
-  progressLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: COLORS.secondary,
+
+  // Goals card
+  todayBadge: {
+    backgroundColor: C.surfaceHigh,
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  todayBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: C.muted,
+    letterSpacing: 0.8,
+  },
+
+  // Half cards
+  halfValue: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: C.text,
+    letterSpacing: -1,
     marginTop: 8,
   },
-  photoOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 12,
-  },
-  photoContent: {
-    justifyContent: 'flex-end',
-    paddingBottom: 16,
-  },
-  photoLabel: {
+  halfMeta: {
     fontSize: 10,
     fontWeight: '600',
-    color: `${COLORS.text}B3`,
+    color: C.mutedLo,
     letterSpacing: 0.5,
-    marginBottom: 4,
+    marginTop: 4,
   },
-  photoTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: COLORS.text,
-    marginBottom: 8,
-  },
-  photoDate: {
+
+  // Calories card
+  caloriesCard: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    alignItems: 'stretch',
+    padding: 0,
+    overflow: 'hidden',
+    minHeight: 88,
   },
-  photoDateIcon: {
-    fontSize: 12,
-  },
-  photoDateText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: COLORS.primaryDim,
-  },
-  sleepHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  sleepIcon: {
-    fontSize: 20,
-  },
-  sleepBars: {
-    flexDirection: 'row',
-    gap: 2,
-    marginTop: 12,
-  },
-  sleepBar: {
+  caloriesLeft: {
     flex: 1,
-    height: 3,
-    backgroundColor: COLORS.tertiary,
-    borderRadius: 1.5,
+    padding: 14,
+    justifyContent: 'space-between',
   },
-  caloricContent: {
-    flexDirection: 'row',
+  caloriesDivider: {
+    width: 1,
+    backgroundColor: '#2a2a2a',
+    marginVertical: 14,
+  },
+  caloriesRight: {
+    width: 90,
+    padding: 14,
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginTop: 12,
   },
-  caloricValue: {
-    fontSize: 28,
-    fontWeight: '700',
-    fontStyle: 'italic',
-    color: COLORS.text,
+  caloriesValue: {
+    fontSize: 36,
+    fontWeight: '900',
+    color: C.text,
+    letterSpacing: -1.5,
   },
-  caloricRemaining: {
-    alignItems: 'flex-end',
-  },
-  caloricRemainingLabel: {
-    fontSize: 10,
-    color: COLORS.textVariant,
-    letterSpacing: 0.3,
-  },
-  caloricRemainingValue: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  burnContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginTop: 12,
-  },
-  burnIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 2,
-    borderColor: COLORS.primaryDim,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  burnIconText: {
-    fontSize: 24,
-  },
-  burnUnit: {
-    fontSize: 10,
-    color: COLORS.textVariant,
+  caloriesUnit: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: C.muted,
     marginLeft: 4,
+    marginBottom: 2,
   },
-  bodyFatContent: {
-    flexDirection: 'column',
+  caloriesRemaining: {
+    fontSize: 36,
+    fontWeight: '900',
+    color: C.primary,
+    letterSpacing: -1.5,
     marginTop: 8,
   },
-  bodyFatChange: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  bpContent: {
+
+  // Gallery
+  galleryHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 12,
+    marginBottom: 12,
   },
-  bpStatus: {
-    backgroundColor: COLORS.secondary,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+  galleryTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: C.text,
+    letterSpacing: -0.5,
   },
-  bpStatusText: {
-    fontSize: 8,
-    fontWeight: '700',
-    color: '#000000',
-  },
-  bpChart: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 2,
-    marginTop: 8,
-  },
-  bpBar: {
-    flex: 1,
-    backgroundColor: COLORS.secondary,
-    borderRadius: 2,
-    opacity: 0.3,
-  },
-  lbmContent: {
-    marginTop: 8,
-  },
-  lbmValue: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginBottom: 4,
-  },
-  lbmUnit: {
-    fontSize: 10,
-    color: COLORS.textVariant,
-    marginLeft: 4,
-    fontStyle: 'italic',
-  },
-  lbmGain: {
-    fontSize: 10,
+  gallerySub: {
+    fontSize: 9,
     fontWeight: '600',
-    letterSpacing: 0.3,
-    marginTop: 4,
+    color: C.muted,
+    letterSpacing: 0.8,
+    marginTop: 2,
   },
-  bottomSpacer: {
-    height: 120,
+  navBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: C.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 6,
   },
-  fabContainer: {
+  navBtnText: {
+    fontSize: 20,
+    color: C.text,
+    lineHeight: 24,
+  },
+  photoTabs: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  photoTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: C.surface,
+  },
+  photoTabActive: {
+    backgroundColor: C.primary,
+  },
+  photoTabText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: C.muted,
+    letterSpacing: 0.6,
+  },
+  photoTabTextActive: {
+    color: '#000',
+  },
+  photoPlaceholder: {
+    height: 260,
+    backgroundColor: C.surface,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 14,
+  },
+  photoPlaceholderText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: C.mutedLo,
+    letterSpacing: 1,
+  },
+  addPhotoBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: C.surfaceHigh,
+  },
+  addPhotoBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.text,
+  },
+
+  // FAB
+  fab: {
     position: 'absolute',
     bottom: 100,
     right: 16,
-    gap: 12,
-    alignItems: 'flex-end',
-  },
-  fab: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: COLORS.surfaceHighest,
-    borderWidth: 1,
-    borderColor: `${COLORS.text}1A`,
+    height: 52,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    backgroundColor: C.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: COLORS.text,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  fabIcon: {
-    fontSize: 24,
-  },
-  fabPrimary: {
-    height: 56,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    backgroundColor: COLORS.primary,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    shadowColor: COLORS.primary,
+    elevation: 12,
+    shadowColor: C.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 16,
-    elevation: 12,
   },
-  fabPrimaryIcon: {
-    fontSize: 20,
-    color: '#000000',
-  },
-  fabPrimaryText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#000000',
-    letterSpacing: 0.5,
+  fabText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#000',
+    letterSpacing: 0.3,
   },
 });
 
