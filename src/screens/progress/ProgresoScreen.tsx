@@ -35,8 +35,8 @@ interface Props {
 const ProgresoScreen: React.FC<Props> = ({ navigation }) => {
   const loadProgressData = useProgressStore((s) => s.loadProgressData);
   const measurements = useProgressStore((s) => s.measurements);
-  const todayWorkouts = useProgressStore((s) => s.todayWorkouts);
-  const todayHydration = useProgressStore((s) => s.todayHydration);
+  const todayGoals = useProgressStore((s) => s.todayGoals);
+  const isStale = useProgressStore((s) => s.isStale);
 
   useEffect(() => {
     void loadProgressData();
@@ -52,17 +52,16 @@ const ProgresoScreen: React.FC<Props> = ({ navigation }) => {
       ? parseFloat((weight - prevWeight).toFixed(1))
       : null;
 
-  const bodyFat = latestM?.body_fat_pct ?? null;
-  const leanMass =
-    weight != null && bodyFat != null
-      ? parseFloat((weight * (1 - bodyFat / 100)).toFixed(1))
-      : null;
+  // Goal percentages from daily_goals
+  function goalPct(type: string): number {
+    const g = todayGoals.find((g) => g.goal_type === type);
+    if (!g || g.target_value === 0) return 0;
+    return Math.min(100, Math.round((g.current_value / g.target_value) * 100));
+  }
 
-  const hydrationMl = todayHydration?.total_ml ?? 0;
-  const hydrationGoalMl = todayHydration?.goal_ml ?? 3000;
-  const hydrationPct = Math.min(100, Math.round((hydrationMl / hydrationGoalMl) * 100));
-
-  const workoutPct = todayWorkouts.length > 0 ? 100 : 0;
+  const workoutPct = goalPct('training');
+  const nutritionPct = goalPct('meals');
+  const hydrationPct = goalPct('hydration');
 
   // Sparkline – oldest to newest
   const sparklineEntries = useMemo(
@@ -92,6 +91,14 @@ const ProgresoScreen: React.FC<Props> = ({ navigation }) => {
   return (
     <View style={s.root}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
+        {/* ── Offline banner ─────────────────────────────────────── */}
+        {isStale && (
+          <View style={s.offlineBanner}>
+            <Text style={s.offlineDot}>●</Text>
+            <Text style={s.offlineText}>Sin conexión — mostrando último dato conocido</Text>
+          </View>
+        )}
+
         {/* ── Header ─────────────────────────────────────────────── */}
         <View style={s.header}>
           <Text style={s.headerEyebrow}>
@@ -158,7 +165,7 @@ const ProgresoScreen: React.FC<Props> = ({ navigation }) => {
           </View>
 
           <GoalBar icon="training" label="ENTRENAMIENTO" pct={workoutPct} color={C.primary} />
-          <GoalBar icon="nutrition" label="NUTRICIÓN" pct={0} color={C.primary} />
+          <GoalBar icon="nutrition" label="NUTRICIÓN" pct={nutritionPct} color={C.primary} />
           <GoalBar icon="hydration" label="HIDRATACIÓN" pct={hydrationPct} color={C.primary} />
         </View>
 
@@ -675,6 +682,31 @@ const s = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     color: '#000',
+    letterSpacing: 0.3,
+  },
+
+  // Offline
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginHorizontal: CARD_PADDING,
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: '#1a1400',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#3a3000',
+  },
+  offlineDot: {
+    fontSize: 7,
+    color: C.orange,
+  },
+  offlineText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: C.orange,
     letterSpacing: 0.3,
   },
 });
