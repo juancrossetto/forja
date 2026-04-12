@@ -24,15 +24,7 @@ export const HomeStack: React.FC = () => {
       }}
     >
       <Stack.Screen name="Inicio" component={HomeScreen} />
-      <Stack.Screen
-        name="Metas"
-        component={MetasScreen}
-        options={{
-          headerShown: true,
-          title: 'Mis Metas',
-          headerTransparent: true,
-        }}
-      />
+      <Stack.Screen name="Metas" component={MetasScreen} />
       <Stack.Screen
         name="Perfil"
         component={ProfileScreen}

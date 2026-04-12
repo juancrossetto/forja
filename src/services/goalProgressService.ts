@@ -8,17 +8,13 @@
 import { supabase } from '../lib/supabase';
 import { syncGoalProgress } from './goalsService';
 import { sendGoalCompletedNotification } from './pushNotificationService';
+import { todayISO } from '../utils/dateUtils';
 
 /* ── Helpers ── */
 
 async function getUserId(): Promise<string | null> {
   const { data } = await supabase.auth.getSession();
   return data?.session?.user?.id ?? null;
-}
-
-function todayISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 /**
@@ -85,12 +81,27 @@ export async function syncMealsGoal(date?: string): Promise<void> {
 }
 
 /**
- * Call after saving a workout log. Syncs to the training goal.
- * For now, target_value=1 and we set current_value=1 (completed one workout).
+ * Call after saving or deleting workout logs. Syncs session count for the day.
  */
 export async function syncTrainingGoal(date?: string): Promise<void> {
   const dateStr = date ?? todayISO();
-  const result = await syncGoalProgress('training', 1, dateStr);
+  const userId = await getUserId();
+  if (!userId) return;
+
+  const { count, error } = await supabase
+    .from('workout_logs')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('date', dateStr)
+    .eq('completed', true);
+
+  if (error) {
+    console.error('syncTrainingGoal count:', error.message);
+    return;
+  }
+
+  const n = count ?? 0;
+  const result = await syncGoalProgress('training', n, dateStr);
 
   if (result.newlyCompleted) {
     await sendGoalCompletedNotification('Entrenamiento completado');
@@ -120,7 +131,7 @@ export async function syncAllGoalsForDate(date?: string): Promise<void> {
   const userId = await getUserId();
   if (!userId) return;
 
-  // 1. Hydration
+  // 1. Hydration (always sync so zeros clear stale current_value)
   const { data: hydration } = await supabase
     .from('hydration_logs')
     .select('total_ml')
@@ -128,31 +139,27 @@ export async function syncAllGoalsForDate(date?: string): Promise<void> {
     .eq('date', dateStr)
     .maybeSingle();
 
-  if (hydration?.total_ml) {
-    await syncGoalProgress('hydration', hydration.total_ml, dateStr);
-  }
+  const totalMl = hydration?.total_ml ?? 0;
+  await syncGoalProgress('hydration', totalMl, dateStr);
 
-  // 2. Meals count
+  // 2. Meals
   const { count: mealCount } = await supabase
     .from('meal_logs')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId)
     .eq('date', dateStr);
 
-  if (mealCount && mealCount > 0) {
-    await syncGoalProgress('meals', mealCount, dateStr);
-  }
+  await syncGoalProgress('meals', mealCount ?? 0, dateStr);
 
-  // 3. Training (any workout logged = 1)
+  // 3. Training — completed sessions only (matches syncTrainingGoal)
   const { count: workoutCount } = await supabase
     .from('workout_logs')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId)
-    .eq('date', dateStr);
+    .eq('date', dateStr)
+    .eq('completed', true);
 
-  if (workoutCount && workoutCount > 0) {
-    await syncGoalProgress('training', 1, dateStr);
-  }
+  await syncGoalProgress('training', workoutCount ?? 0, dateStr);
 
   // 4. Steps (done separately via stepCounterService on app open)
 }

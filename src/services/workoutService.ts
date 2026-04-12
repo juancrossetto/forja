@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { syncTrainingGoal } from './goalProgressService';
+import { todayISO, toLocalISODate } from '../utils/dateUtils';
 
 export type CardioActivityId =
   | 'running'
@@ -22,10 +23,6 @@ export interface WorkoutLog {
   distance?: number | null;
   distance_unit?: 'km' | 'mi' | null;
   duration_seconds?: number | null;
-}
-
-function todayISO(): string {
-  return new Date().toISOString().split('T')[0];
 }
 
 async function getUserId(): Promise<string | null> {
@@ -289,7 +286,7 @@ export async function getWeeklyWorkoutCount(): Promise<number> {
   const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // days since Monday
   const monday = new Date(today);
   monday.setDate(today.getDate() - diff);
-  const mondayISO = monday.toISOString().split('T')[0];
+  const mondayISO = toLocalISODate(monday);
 
   const { count, error } = await supabase
     .from('workout_logs')

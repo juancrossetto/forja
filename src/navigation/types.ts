@@ -38,6 +38,7 @@ export type ProgressStackParamList = {
   Progreso: undefined;
   CargarFotos: undefined;
   PesoYMedidas: undefined;
+  PesoCorporalDetail: undefined;
 };
 
 // Profile Stack Types

@@ -4,12 +4,9 @@ import { getMeasurementHistory, BodyMeasurement } from '../services/measurements
 import { getWorkoutsForDate, WorkoutLog } from '../services/workoutService';
 import { getHydrationForDate, HydrationLog } from '../services/hydrationService';
 import { getGoalsForDate, DailyGoal } from '../services/goalsService';
+import { syncAllGoalsForDate } from '../services/goalProgressService';
 import { cacheRead, cacheWrite, CACHE_KEYS } from '../lib/cache';
-
-function todayKey(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
+import { todayISO } from '../utils/dateUtils';
 
 interface ProgressState {
   entries: ProgressEntry[];
@@ -53,7 +50,7 @@ export const useProgressStore = create<ProgressState>((set, get) => ({
   loadProgressData: async () => {
     set({ isLoading: true });
 
-    const dateKey = todayKey();
+    const dateKey = todayISO();
 
     // ── 1. Hydrate from cache immediately so UI isn't blank ──────────
     const [cachedMeasurements, cachedGoals, cachedHydration, cachedWorkouts] =
@@ -80,13 +77,14 @@ export const useProgressStore = create<ProgressState>((set, get) => ({
       });
     }
 
-    // ── 2. Fetch fresh data from Supabase ────────────────────────────
+    // ── 2. Reconcile goals from source tables, then fetch fresh data ──
     try {
+      await syncAllGoalsForDate(dateKey);
       const today = new Date();
       const [measurements, todayWorkouts, todayHydration, todayGoals] = await Promise.all([
         getMeasurementHistory(10),
         getWorkoutsForDate(),
-        getHydrationForDate(),
+        getHydrationForDate(dateKey),
         getGoalsForDate(today),
       ]);
 

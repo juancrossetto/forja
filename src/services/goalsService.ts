@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { todayISO, toLocalISODate } from '../utils/dateUtils';
 
 /* ── Types ── */
 
@@ -32,6 +33,28 @@ export interface GoalTemplate {
   sort_order: number;
 }
 
+/** Título en UI: metas con número desde `target_value`, no el texto fijo de plantilla. */
+export function getGoalDisplayText(goal: DailyGoal): string {
+  switch (goal.goal_type) {
+    case 'meals': {
+      const n = Math.max(1, Math.round(Number(goal.target_value ?? 1)));
+      return `Registrar ${n} comidas del día de hoy`;
+    }
+    case 'steps': {
+      const n = Math.max(1, Math.round(Number(goal.target_value ?? 1)));
+      return `Caminar ${n.toLocaleString('es-AR')} pasos del día de hoy`;
+    }
+    case 'hydration': {
+      const ml = Math.max(0, Math.round(Number(goal.target_value ?? 0)));
+      const lit = ml / 1000;
+      const litStr = lit.toLocaleString('es-AR', { maximumFractionDigits: 2 });
+      return `Beber ${litStr} L de agua del día de hoy`;
+    }
+    default:
+      return goal.text;
+  }
+}
+
 /* ── Helpers ── */
 
 async function getUserId(): Promise<string | null> {
@@ -46,7 +69,7 @@ async function getUserId(): Promise<string | null> {
  * If none exist, assigns from active templates via DB function.
  */
 export async function getGoalsForDate(date: Date): Promise<DailyGoal[]> {
-  const dateStr = date.toISOString().split('T')[0];
+  const dateStr = toLocalISODate(date);
   const userId = await getUserId();
   if (!userId) return [];
 
@@ -103,26 +126,29 @@ export async function getGoalsForDate(date: Date): Promise<DailyGoal[]> {
  * For auto_track goals, also sets current_value = target_value when checked.
  */
 export async function toggleGoal(goalId: string, completed: boolean): Promise<boolean> {
-  // First get the goal to know if it's auto-tracked
+  const userId = await getUserId();
+  if (!userId) return false;
+
   const { data: goal } = await supabase
     .from('daily_goals')
     .select('auto_track, target_value')
     .eq('id', goalId)
-    .single();
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (!goal) return false;
 
   const updatePayload: Record<string, unknown> = { completed };
 
-  // If manually completing an auto-track goal, set current_value = target_value
-  if (goal?.auto_track && completed) {
+  if (goal.auto_track && completed) {
     updatePayload.current_value = goal.target_value;
   }
-  // If manually un-completing an auto-track goal, don't reset current_value
-  // (the real data still exists)
 
   const { error } = await supabase
     .from('daily_goals')
     .update(updatePayload)
-    .eq('id', goalId);
+    .eq('id', goalId)
+    .eq('user_id', userId);
 
   if (error) {
     console.error('Error toggling goal:', error.message);
@@ -131,22 +157,39 @@ export async function toggleGoal(goalId: string, completed: boolean): Promise<bo
   return true;
 }
 
+const CUSTOM_GOAL_TEXT_MIN = 2;
+const CUSTOM_GOAL_TEXT_MAX = 120;
+
 /**
- * Add a custom goal for a date.
+ * Add a custom (manual) goal for a date. Text is trimmed; length 2–120.
  */
 export async function addGoal(date: Date, text: string): Promise<DailyGoal | null> {
-  const dateStr = date.toISOString().split('T')[0];
+  const trimmed = text.trim();
+  if (trimmed.length < CUSTOM_GOAL_TEXT_MIN || trimmed.length > CUSTOM_GOAL_TEXT_MAX) {
+    return null;
+  }
+
+  const dateStr = toLocalISODate(date);
   const userId = await getUserId();
   if (!userId) return null;
+
+  const { data: existing } = await supabase
+    .from('daily_goals')
+    .select('sort_order')
+    .eq('user_id', userId)
+    .eq('date', dateStr);
+
+  const maxOrder = Math.max(0, ...(existing ?? []).map((r) => Number(r.sort_order ?? 0)));
+  const sort_order = maxOrder + 1;
 
   const { data, error } = await supabase
     .from('daily_goals')
     .insert({
       user_id: userId,
       date: dateStr,
-      text,
+      text: trimmed,
       completed: false,
-      sort_order: 99,
+      sort_order,
       goal_type: 'custom',
       target_value: 1,
       current_value: 0,
@@ -164,13 +207,72 @@ export async function addGoal(date: Date, text: string): Promise<DailyGoal | nul
 }
 
 /**
+ * Update target_value for a daily goal row (configuración de metas del día).
+ * Si es hidratación, actualiza también `hydration_logs.goal_ml` para que Hidratación y el resto coincidan.
+ */
+export async function updateDailyGoalTarget(goalId: string, target_value: number): Promise<boolean> {
+  const userId = await getUserId();
+  if (!userId) return false;
+
+  const { data: row, error: fetchErr } = await supabase
+    .from('daily_goals')
+    .select('goal_type, date')
+    .eq('id', goalId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (fetchErr || !row) {
+    console.error('updateDailyGoalTarget fetch:', fetchErr?.message);
+    return false;
+  }
+
+  const { error } = await supabase
+    .from('daily_goals')
+    .update({ target_value })
+    .eq('id', goalId)
+    .eq('user_id', userId);
+
+  if (error) {
+    console.error('Error updating goal target:', error.message);
+    return false;
+  }
+
+  if (row.goal_type === 'hydration') {
+    const dateStr = row.date as string;
+    const goalMl = Math.round(Number(target_value));
+    const { data: hyd } = await supabase
+      .from('hydration_logs')
+      .select('total_ml')
+      .eq('user_id', userId)
+      .eq('date', dateStr)
+      .maybeSingle();
+    const { error: hErr } = await supabase.from('hydration_logs').upsert(
+      {
+        user_id: userId,
+        date: dateStr,
+        total_ml: hyd?.total_ml ?? 0,
+        goal_ml: goalMl,
+      },
+      { onConflict: 'user_id,date' },
+    );
+    if (hErr) console.error('sync hydration_logs.goal_ml:', hErr.message);
+  }
+
+  return true;
+}
+
+/**
  * Delete a goal.
  */
 export async function deleteGoal(goalId: string): Promise<boolean> {
+  const userId = await getUserId();
+  if (!userId) return false;
+
   const { error } = await supabase
     .from('daily_goals')
     .delete()
-    .eq('id', goalId);
+    .eq('id', goalId)
+    .eq('user_id', userId);
 
   if (error) {
     console.error('Error deleting goal:', error.message);
@@ -191,7 +293,7 @@ export async function syncGoalProgress(
   date?: string,
 ): Promise<{ newlyCompleted: boolean; goalId: string | null }> {
   const userId = await getUserId();
-  const dateStr = date ?? new Date().toISOString().split('T')[0];
+  const dateStr = date ?? todayISO();
   if (!userId) return { newlyCompleted: false, goalId: null };
 
   const { data, error } = await supabase.rpc('update_goal_progress', {

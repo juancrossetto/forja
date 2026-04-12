@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { todayISO } from '../utils/dateUtils';
 
 export interface BodyMeasurement {
   id: string;
@@ -12,10 +13,6 @@ export interface BodyMeasurement {
   hips_cm: number | null;
   arms_cm: number | null;
   legs_cm: number | null;
-}
-
-function todayISO(): string {
-  return new Date().toISOString().split('T')[0];
 }
 
 async function getUserId(): Promise<string | null> {

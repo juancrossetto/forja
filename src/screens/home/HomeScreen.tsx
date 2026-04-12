@@ -18,20 +18,17 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppProgressiveHeader, HEADER_ROW_HEIGHT } from '../../components/AppProgressiveHeader';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
 import { useAuthStore } from '../../store/authStore';
 import { useUIStore } from '../../store/uiStore';
-import {
-  getGoalsForDate,
-  toggleGoal as toggleGoalApi,
-  type DailyGoal,
-} from '../../services/goalsService';
+import { getGoalsForDate, getGoalDisplayText, type DailyGoal } from '../../services/goalsService';
 import { getProfile } from '../../services/profileService';
 import { syncAllGoalsForDate } from '../../services/goalProgressService';
 import { registerForPushNotifications } from '../../services/pushNotificationService';
 import { startStepTracking, stopStepTracking, syncStepsToGoal } from '../../services/stepCounterService';
+import { toLocalISODate } from '../../utils/dateUtils';
 
 type Nav = NativeStackNavigationProp<HomeStackParamList>;
 
@@ -88,7 +85,7 @@ function generateDays(): CalendarDay[] {
       dayNumber: d.getDate(),
       monthName: MONTHS[d.getMonth()],
       isToday: i === 0,
-      key: d.toISOString().split('T')[0],
+      key: toLocalISODate(d),
     });
   }
   return days;
@@ -130,57 +127,41 @@ function goalProgressPct(goal: DailyGoal): number {
   return Math.min((goal.current_value ?? 0) / goal.target_value, 1);
 }
 
-// ── Animated Goal Item ──────────────────────────────────────────────────────
-const GoalItem = React.memo(({ goal, onToggle }: { goal: DailyGoal; onToggle: (g: DailyGoal) => void }) => {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const bgAnim    = useRef(new Animated.Value(goal.completed ? 1 : 0)).current;
-
-  useEffect(() => {
-    Animated.timing(bgAnim, {
-      toValue: goal.completed ? 1 : 0,
-      duration: 280,
-      useNativeDriver: false,
-    }).start();
-  }, [goal.completed]);
-
-  const handlePress = () => {
-    Animated.sequence([
-      Animated.timing(scaleAnim, { toValue: 0.72, duration: 75, useNativeDriver: true }),
-      Animated.spring(scaleAnim, { toValue: 1, friction: 3, tension: 220, useNativeDriver: true }),
-    ]).start();
-    onToggle(goal);
-  };
-
-  const bgColor = bgAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['rgba(209,255,38,0)', 'rgba(209,255,38,0.06)'],
-  });
-
+// ── Meta del día (solo lectura: se sincroniza con la actividad; no se toca para completar) ──
+const GoalItemReadOnly = React.memo(({ goal }: { goal: DailyGoal }) => {
   const progress = goalProgressLabel(goal);
   const pct = goalProgressPct(goal);
+  const done = goal.completed;
+  const boolHint =
+    goal.auto_track && goal.target_unit === 'boolean' && !progress
+      ? done
+        ? 'Listo para hoy'
+        : 'Pendiente de actividad'
+      : null;
 
   return (
-    <TouchableOpacity onPress={handlePress} activeOpacity={0.8}>
-      <Animated.View style={[styles.goalItem, { backgroundColor: bgColor }]}>
-        <Animated.View style={[styles.goalCheckbox, goal.completed && styles.goalCheckboxCompleted, { transform: [{ scale: scaleAnim }] }]}>
-          {goal.completed && <MaterialCommunityIcons name="check" size={13} color="#000" />}
-        </Animated.View>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.goalText, goal.completed && styles.goalTextCompleted]}>{goal.text}</Text>
-          {progress && (
-            <View style={styles.goalProgressRow}>
-              <View style={styles.goalProgressBarBgSmall}>
-                <View style={[styles.goalProgressBarFillSmall, { width: `${Math.round(pct * 100)}%` }]} />
-              </View>
-              <Text style={styles.goalProgressLabel}>{progress}</Text>
-            </View>
-          )}
-        </View>
-        {goal.completed && (
-          <MaterialCommunityIcons name="check-circle" size={16} color={COLORS.primary} style={{ opacity: 0.55 }} />
+    <View style={[styles.goalItem, done && styles.goalItemDone]}>
+      <View style={[styles.goalStatusIcon, done && styles.goalStatusIconDone]}>
+        {done ? (
+          <MaterialCommunityIcons name="check" size={12} color="#0e0e0e" />
+        ) : (
+          <View style={styles.goalStatusPending} />
         )}
-      </Animated.View>
-    </TouchableOpacity>
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.goalText, done && styles.goalTextDone]}>{getGoalDisplayText(goal)}</Text>
+        {progress ? (
+          <View style={styles.goalProgressRow}>
+            <View style={styles.goalProgressBarBgSmall}>
+              <View style={[styles.goalProgressBarFillSmall, { width: `${Math.round(pct * 100)}%` }]} />
+            </View>
+            <Text style={styles.goalProgressLabel}>{progress}</Text>
+          </View>
+        ) : boolHint ? (
+          <Text style={styles.goalAutoHint}>{boolHint}</Text>
+        ) : null}
+      </View>
+    </View>
   );
 });
 
@@ -213,7 +194,7 @@ const HomeScreen: React.FC = () => {
   const loadGoals = useCallback(async (date: Date) => {
     setGoalsLoading(true);
     try {
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = toLocalISODate(date);
       // Ensure goals exist first, then sync real-time progress
       const data = await getGoalsForDate(date);
       setGoals(data);
@@ -235,8 +216,14 @@ const HomeScreen: React.FC = () => {
   useEffect(() => {
     loadGoals(selectedDate);
     // Sync active date to global store so other screens (e.g. Hidratacion) know which day we're on
-    setActiveDate(selectedDate.toISOString().split('T')[0]);
+    setActiveDate(toLocalISODate(selectedDate));
   }, [selectedDate, loadGoals, setActiveDate]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadGoals(selectedDate);
+    }, [loadGoals, selectedDate]),
+  );
 
   // Load avatar into shared store (all headers across tabs share it)
   useEffect(() => {
@@ -318,21 +305,6 @@ const HomeScreen: React.FC = () => {
     for (let i = 0; i < firstDay; i++) days.push(null);
     for (let i = 1; i <= daysInMonth; i++) days.push(i);
     return days;
-  };
-
-  const handleToggleGoal = async (goal: DailyGoal) => {
-    const newCompleted = !goal.completed;
-    // Optimistic update
-    setGoals((prev) =>
-      prev.map((g) => (g.id === goal.id ? { ...g, completed: newCompleted } : g))
-    );
-    const ok = await toggleGoalApi(goal.id, newCompleted);
-    if (!ok) {
-      // Revert on error
-      setGoals((prev) =>
-        prev.map((g) => (g.id === goal.id ? { ...g, completed: !newCompleted } : g))
-      );
-    }
   };
 
   const completedGoals = goals.filter((g) => g.completed).length;
@@ -524,14 +496,17 @@ const HomeScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          {/* Goals Section */}
+          {/* Goals Section: lectura automática + acceso explícito a configuración */}
           <View style={styles.goalsSection}>
             <View style={styles.goalsSectionHeader}>
-              <View>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.goalsSectionTitle}>Metas del día</Text>
+                <Text style={styles.goalsSectionHint}>
+                  Progreso automático según tu actividad (comidas, agua, entreno, pasos…)
+                </Text>
                 {!goalsLoading && goals.length > 0 && (
                   <Text style={styles.goalsSubtitle}>
-                    {completedGoals} de {goals.length} completadas
+                    {completedGoals} de {goals.length} al día
                   </Text>
                 )}
               </View>
@@ -567,10 +542,21 @@ const HomeScreen: React.FC = () => {
             ) : (
               <View style={styles.goalsList}>
                 {goals.map((goal) => (
-                  <GoalItem key={goal.id} goal={goal} onToggle={handleToggleGoal} />
+                  <GoalItemReadOnly key={goal.id} goal={goal} />
                 ))}
               </View>
             )}
+
+            <TouchableOpacity
+              style={styles.goalsCardFooter}
+              onPress={() => navigation.navigate('Metas')}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Configurar metas"
+            >
+              <Text style={styles.goalsCardFooterText}>CONFIGURAR</Text>
+              <MaterialCommunityIcons name="chevron-right" size={14} color={COLORS.primaryDim} />
+            </TouchableOpacity>
           </View>
 
           <View style={{ height: 100 }} />
@@ -971,7 +957,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   goalsSectionTitle: {
     fontSize: 18,
@@ -979,10 +965,33 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     marginBottom: 4,
   },
+  goalsSectionHint: {
+    fontSize: 11,
+    color: COLORS.textTertiary,
+    fontWeight: '500',
+    lineHeight: 15,
+    marginBottom: 6,
+  },
   goalsSubtitle: {
     fontSize: 11,
     color: COLORS.textTertiary,
     fontWeight: '500',
+  },
+  goalsCardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  goalsCardFooterText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: COLORS.primaryDim,
+    letterSpacing: 1.5,
   },
   goalsRing: {
     width: 48,
@@ -1021,34 +1030,47 @@ const styles = StyleSheet.create({
   goalItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    paddingVertical: 11,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: 'transparent',
+    gap: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.02)',
   },
-
-  goalCheckbox: {
+  goalItemDone: {
+    backgroundColor: 'rgba(209,255,38,0.05)',
+  },
+  goalStatusIcon: {
     width: 22,
     height: 22,
-    borderRadius: 6,
+    borderRadius: 11,
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.18)',
+    borderColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
     flexShrink: 0,
   },
-  goalCheckboxCompleted: {
+  goalStatusIconDone: {
     backgroundColor: COLORS.primary,
     borderColor: COLORS.primary,
+  },
+  goalStatusPending: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
   goalText: {
     fontSize: 13,
     color: COLORS.textPrimary,
     fontWeight: '500',
   },
-  goalTextCompleted: {
-    textDecorationLine: 'line-through',
+  goalTextDone: {
+    color: COLORS.textSecondary,
+  },
+  goalAutoHint: {
+    marginTop: 4,
+    fontSize: 10,
+    fontWeight: '600',
     color: COLORS.textTertiary,
   },
   goalProgressRow: {

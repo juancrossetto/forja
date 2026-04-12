@@ -13,10 +13,9 @@ export const AuthStack: React.FC = () => {
     <Stack.Navigator
       screenOptions={{
         headerShown: false,
-        cardStyle: {
+        contentStyle: {
           backgroundColor: '#0a0e27', // Dark background matching design
         },
-        animationEnabled: true,
       }}
     >
       <Stack.Screen
@@ -30,7 +29,7 @@ export const AuthStack: React.FC = () => {
         name="SignUp"
         component={SignUpScreen}
         options={{
-          animationTypeForReplace: 'slide_from_right',
+          animationTypeForReplace: 'push',
         }}
       />
     </Stack.Navigator>

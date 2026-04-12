@@ -18,6 +18,7 @@ import {
   saveMeasurements,
 } from '../../services/measurementsService';
 import { useProgressStore } from '../../store/progressStore';
+import { todayISO } from '../../utils/dateUtils';
 
 const BODY_IMAGES = {
   male:   require('../../../assets/male.png'),
@@ -64,8 +65,6 @@ const HOTSPOTS: Record<string, { top: number; left: number }> = {
   hips:  { top: BODY_H * 0.48, left: FRAME_W * 0.42 },
   legs:  { top: BODY_H * 0.68, left: FRAME_W * 0.43 },
 };
-
-const todayISO = () => new Date().toISOString().split('T')[0];
 
 const PesoYMedidasScreen: React.FC = () => {
   const navigation = useNavigation();

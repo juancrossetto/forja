@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { todayISO } from '../utils/dateUtils';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 
@@ -27,10 +28,6 @@ function getISOWeek(date: Date): number {
  *  Same day → overwrites. Different day → new folder, new file. */
 function buildStoragePath(userId: string, position: PhotoPosition, date: string): string {
   return `${userId}/${date}/${position}.jpg`;
-}
-
-function todayISO(): string {
-  return new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 }
 
 /**

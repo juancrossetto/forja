@@ -102,11 +102,9 @@ export function stopStepTracking(): void {
  */
 export async function syncStepsToGoal(): Promise<void> {
   const steps = await getStepsToday();
-  if (steps > 0) {
-    const result = await syncGoalProgress('steps', steps);
-    if (result.newlyCompleted) {
-      sendGoalCompletedNotification('Caminar 10,000 pasos', steps);
-    }
+  const result = await syncGoalProgress('steps', steps);
+  if (result.newlyCompleted) {
+    sendGoalCompletedNotification('Caminar 10,000 pasos', steps);
   }
 }
 

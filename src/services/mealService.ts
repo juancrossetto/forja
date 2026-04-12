@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { todayISO } from '../utils/dateUtils';
+import { todayISO, toLocalISODate } from '../utils/dateUtils';
 import { syncMealsGoal } from './goalProgressService';
 
 export type MealType = 'DES' | 'ALM' | 'MER' | 'CEN';
@@ -135,7 +135,7 @@ export async function getRecentMeals(days = 7): Promise<MealLog[]> {
 
   const from = new Date();
   from.setDate(from.getDate() - (days - 1));
-  const fromISO = from.toISOString().split('T')[0];
+  const fromISO = toLocalISODate(from);
 
   const { data, error } = await supabase
     .from('meal_logs')

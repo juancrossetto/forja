@@ -12,11 +12,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import {
   getHydrationForDate,
   saveHydration,
   getWeeklyHydration,
+  getHydrationTargetMlForDate,
 } from '../../services/hydrationService';
 import { useUIStore } from '../../store/uiStore';
 import { formatDate, todayISO as getTodayISO } from '../../utils/dateUtils';
@@ -40,7 +41,6 @@ const COLORS = {
   textVariant: '#adaaaa',
 };
 
-const GOAL_ML = 3000;
 const DAY_LABELS = ['DOM', 'LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB'];
 
 function localDateStr(date: Date): string {
@@ -136,54 +136,58 @@ export default function HidratacionScreen() {
   const isToday = activeDate === todayISO();
 
   const [currentMl, setCurrentMl] = useState(0);
+  const [goalMl, setGoalMl] = useState(2500);
   const [weekly, setWeekly] = useState(buildWeekDays());
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    setCurrentMl(0);
+  const reloadHydration = React.useCallback(async () => {
+    const [target, dayLog, weekData] = await Promise.all([
+      getHydrationTargetMlForDate(activeDate),
+      getHydrationForDate(activeDate),
+      getWeeklyHydration(),
+    ]);
+    setGoalMl(target);
 
     const freshWeek = buildWeekDays();
-    setWeekly(freshWeek);
+    const merged = freshWeek.map((d) => {
+      const found = weekData.find((w) => w.date === d.date);
+      return found ? { ...d, ml: found.total_ml } : d;
+    });
 
-    (async () => {
-      const [dayLog, weekData] = await Promise.all([
-        getHydrationForDate(activeDate),
-        getWeeklyHydration(),
-      ]);
-      if (cancelled) return;
-
-      // Merge DB data into week days — compute directly, no state-updater needed
-      const merged = freshWeek.map((d) => {
-        const found = weekData.find((w) => w.date === d.date);
-        return found ? { ...d, ml: found.total_ml } : d;
-      });
-
-      if (dayLog) {
-        // Override today's ml with the DB value in the merged array too
-        const todayStr = activeDate;
-        const finalMerged = merged.map((d) =>
-          d.date === todayStr ? { ...d, ml: dayLog.total_ml } : d
-        );
-        setCurrentMl(dayLog.total_ml);
-        setWeekly(finalMerged);
-      } else {
-        setWeekly(merged);
-      }
-    })();
-
-    return () => { cancelled = true; };
+    if (dayLog) {
+      const todayStr = activeDate;
+      const finalMerged = merged.map((d) =>
+        d.date === todayStr ? { ...d, ml: dayLog.total_ml } : d
+      );
+      setCurrentMl(dayLog.total_ml);
+      setWeekly(finalMerged);
+    } else {
+      setCurrentMl(0);
+      setWeekly(merged);
+    }
   }, [activeDate]);
+
+  useEffect(() => {
+    void reloadHydration();
+  }, [reloadHydration]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      void reloadHydration();
+    }, [reloadHydration])
+  );
 
   const add = (ml: number) => {
     setCurrentMl((prev) => {
       const next = prev + ml;
-      if (prev < GOAL_ML && next >= GOAL_ML)
+      if (prev < goalMl && next >= goalMl) {
         Alert.alert('¡Meta alcanzada!', 'Completaste tu objetivo diario.');
+      }
       return next;
     });
-    // Update today bar in chart
-    setWeekly((w) => w.map((d) => d.date === activeDate ? { ...d, ml: currentMl + ml } : d));
+    setWeekly((w) =>
+      w.map((d) => (d.date === activeDate ? { ...d, ml: d.ml + ml } : d))
+    );
   };
 
   const handleSave = async () => {
@@ -200,8 +204,9 @@ export default function HidratacionScreen() {
     }
   };
 
-  const progress = Math.min(currentMl / GOAL_ML, 1);
+  const progress = goalMl > 0 ? Math.min(currentMl / goalMl, 1) : 0;
   const liters = formatL(currentMl);
+  const goalLiters = formatL(goalMl);
   const daysWithData = weekly.filter((d) => d.ml > 0);
   const avgMl = daysWithData.length > 0
     ? Math.round(daysWithData.reduce((a, b) => a + b.ml, 0) / daysWithData.length)
@@ -242,7 +247,7 @@ export default function HidratacionScreen() {
           <View style={styles.boxContent} pointerEvents="none">
             <View style={styles.valueRow}>
               <Text style={styles.bigValue}>{liters}</Text>
-              <Text style={styles.goalValue}>/ 3.0</Text>
+              <Text style={styles.goalValue}>/ {goalLiters}</Text>
             </View>
             <Text style={styles.litrosLabel}>LITROS DIARIOS</Text>
           </View>

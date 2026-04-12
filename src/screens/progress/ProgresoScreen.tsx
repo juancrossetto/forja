@@ -80,11 +80,13 @@ const ProgresoScreen: React.FC<Props> = ({ navigation }) => {
     ? null
     : watchConnected ? 'APPLE WATCH' : 'IPHONE';
 
-  // Sparkline – oldest to newest
+  // Sparkline – oldest to newest (last 7 entries)
   const sparklineEntries = useMemo(
     () => [...measurements].reverse().slice(-7),
     [measurements],
   );
+
+  // Weight sparkline
   const sparklineWeights = sparklineEntries.map((m) => m.weight_kg ?? 0).filter((w) => w > 0);
   const sparkMin = sparklineWeights.length ? Math.min(...sparklineWeights) : 0;
   const sparkMax = sparklineWeights.length ? Math.max(...sparklineWeights) : 1;
@@ -92,6 +94,7 @@ const ProgresoScreen: React.FC<Props> = ({ navigation }) => {
   const sparkHeights = sparklineWeights.map(
     (w) => 20 + ((w - sparkMin) / sparkRange) * 60,
   );
+
 
   const weightDisplay = weight != null ? weight.toFixed(1) : '—';
   const weightChangeDisplay =
@@ -134,7 +137,11 @@ const ProgresoScreen: React.FC<Props> = ({ navigation }) => {
         </View>
 
         {/* ── Peso Corporal ───────────────────────────────────────── */}
-        <View style={[s.card, { marginHorizontal: CARD_PADDING }]}>
+        <TouchableOpacity
+          style={[s.card, s.cardTappable, { marginHorizontal: CARD_PADDING }]}
+          activeOpacity={0.82}
+          onPress={() => navigation.navigate('PesoCorporalDetail' as never)}
+        >
           <View style={s.row}>
             <Text style={s.cardLabel}>PESO CORPORAL</Text>
             {weightChangeDisplay != null && (
@@ -178,7 +185,12 @@ const ProgresoScreen: React.FC<Props> = ({ navigation }) => {
                   />
                 ))}
           </View>
-        </View>
+          {/* Ver detalle footer */}
+          <View style={s.cardFooter}>
+            <Text style={s.cardFooterText}>VER DETALLE</Text>
+            <IconChevron color={C.primaryDim} size={12} />
+          </View>
+        </TouchableOpacity>
 
         {/* ── Resumen de Metas ────────────────────────────────────── */}
         <View style={[s.card, { marginHorizontal: CARD_PADDING, marginTop: 12 }]}>
@@ -189,9 +201,21 @@ const ProgresoScreen: React.FC<Props> = ({ navigation }) => {
             </View>
           </View>
 
-          <GoalBar icon="training" label="ENTRENAMIENTO" pct={workoutPct} color={C.primary} />
-          <GoalBar icon="nutrition" label="NUTRICIÓN" pct={nutritionPct} color={C.primary} />
-          <GoalBar icon="hydration" label="HIDRATACIÓN" pct={hydrationPct} color={C.primary} />
+          {todayGoals.length === 0 ? (
+            <View style={s.goalsEmpty}>
+              <Text style={s.goalsEmptyIcon}>◎</Text>
+              <Text style={s.goalsEmptyTitle}>Sin metas asignadas</Text>
+              <Text style={s.goalsEmptyBody}>
+                No hay metas activas para hoy. Configurá tus objetivos diarios desde la sección Metas.
+              </Text>
+            </View>
+          ) : (
+            <>
+              <GoalBar icon="training" label="ENTRENAMIENTO" pct={workoutPct} color={C.primary} />
+              <GoalBar icon="nutrition" label="NUTRICIÓN"     pct={nutritionPct} color={C.primary} />
+              <GoalBar icon="hydration" label="HIDRATACIÓN"   pct={hydrationPct} color={C.primary} />
+            </>
+          )}
         </View>
 
         {/* ── Pasos + Descanso ────────────────────────────────────── */}
@@ -364,6 +388,12 @@ const IconMoon: React.FC<{ color: string; size?: number }> = ({ color, size = 14
   </Svg>
 );
 
+const IconChevron: React.FC<{ color: string; size?: number }> = ({ color, size = 14 }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M9 18l6-6-6-6" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
 const IconTrendDown: React.FC<{ color: string; size?: number }> = ({ color, size = 12 }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Path d="M3 7l6 6 4-4 8 8" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
@@ -497,6 +527,26 @@ const s = StyleSheet.create({
     borderRadius: 14,
     padding: 16,
   },
+  cardTappable: {
+    borderWidth: 1,
+    borderColor: 'rgba(209,255,38,0.12)',
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.05)',
+  },
+  cardFooterText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: C.primaryDim,
+    letterSpacing: 1.5,
+  },
   cardLabel: {
     fontSize: 10,
     fontWeight: '700',
@@ -551,6 +601,31 @@ const s = StyleSheet.create({
     backgroundColor: C.primaryDim,
     borderTopLeftRadius: 3,
     borderTopRightRadius: 3,
+  },
+
+  // Goals empty state
+  goalsEmpty: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    gap: 6,
+  },
+  goalsEmptyIcon: {
+    fontSize: 28,
+    color: C.mutedLo,
+    marginBottom: 4,
+  },
+  goalsEmptyTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.muted,
+    letterSpacing: 0.3,
+  },
+  goalsEmptyBody: {
+    fontSize: 11,
+    color: C.mutedLo,
+    textAlign: 'center',
+    lineHeight: 16,
+    paddingHorizontal: 12,
   },
 
   // Goals card
