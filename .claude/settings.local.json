@@ -54,7 +54,8 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebSearch",
       "Bash(grep -E '\\\\.\\(ts|tsx\\)$')",
-      "Bash(grep -E \"\\\\.ts$\")"
+      "Bash(grep -E \"\\\\.ts$\")",
+      "Bash(ls /c/Repos/forja/assets/*.png /c/Repos/forja/assets/*.gif)"
     ]
   }
 }

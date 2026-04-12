@@ -32,6 +32,11 @@ import {
 
 const { width } = Dimensions.get('window');
 
+const BODY_IMAGES = {
+  male:   require('../../../assets/male.png'),
+  female: require('../../../assets/female.png'),
+};
+
 const COLORS = {
   bg:               '#0e0e0e',
   surface:          '#1a1a1a',
@@ -50,10 +55,10 @@ const COLORS = {
 };
 
 const QUICK_ACTIONS = [
-  { label: 'CONFIGURAR', icon: 'cog',            color: COLORS.primaryDim },
-  { label: 'MENSAJES',   icon: 'message',         color: COLORS.secondary  },
-  { label: 'LLAMADA',    icon: 'phone',           color: COLORS.tertiary   },
-  { label: 'COMPARTIR',  icon: 'share-variant',   color: COLORS.text       },
+  { label: 'AJUSTES',   icon: 'cog',           },
+  { label: 'MENSAJES',  icon: 'message',        },
+  { label: 'LLAMADA',   icon: 'phone',          },
+  { label: 'COMPARTIR', icon: 'share-variant',  },
 ] as const;
 
 const ProfileScreen: React.FC = () => {
@@ -228,7 +233,7 @@ const ProfileScreen: React.FC = () => {
         <View style={styles.actionsGrid}>
           {QUICK_ACTIONS.map((a) => (
             <TouchableOpacity key={a.label} style={styles.actionCard} activeOpacity={0.7}>
-              <MaterialCommunityIcons name={a.icon as any} size={28} color={a.color} />
+              <MaterialCommunityIcons name={a.icon as any} size={22} color={COLORS.primary} />
               <Text style={styles.actionLabel}>{a.label}</Text>
             </TouchableOpacity>
           ))}
@@ -238,7 +243,7 @@ const ProfileScreen: React.FC = () => {
         <View style={styles.compositionCard}>
           <View style={styles.silhouetteBox}>
             <Image
-              source={{ uri: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCWHXsYXnDZ8d83QuAQtF3p01zCCyADhIWspMTj2Lu0H4IoR1nUV4_G6b8NNgrhk7gfh5XxArX8cyswqK1MY09uX2FXoFAVeNDyTkI3Gbkt6tng7sJA16P9rkpC6fUJKDYLoBAcbh7scfGV14lBARtFwB2meJZbzEXul0Wk7_4pBpHfwUbSDUv67cZugrjX1nyo7GSqfsEmmJKmL5EDUD0f-u0jn50BcfqecqhlLD7fBQEEx-KM36GVX0-jrHI30gm2JuY-2Kh6XNun' }}
+              source={BODY_IMAGES[measurements?.gender ?? 'male']}
               style={styles.silhouetteImage}
               resizeMode="contain"
             />
@@ -249,36 +254,38 @@ const ProfileScreen: React.FC = () => {
           </View>
 
           <Text style={styles.compositionTitle}>
-            COMPOSICIÓN{'\n'}<Text style={{ color: COLORS.primaryDim }}>CORPORAL</Text>
+            COMPOSICIÓN <Text style={{ color: COLORS.primaryDim }}>CORPORAL</Text>
           </Text>
 
-          <View style={[styles.metricRow, { borderLeftColor: COLORS.primaryDim }]}>
-            <Text style={styles.metricLabel}>PESO ACTUAL</Text>
-            <View style={styles.metricValueRow}>
-              <Text style={styles.metricValue}>
-                {measurements?.weight_kg != null ? measurements.weight_kg : '—'}
-              </Text>
-              <Text style={styles.metricUnit}>KG</Text>
+          <View style={styles.metricsRow}>
+            <View style={[styles.metricCell, { borderLeftColor: COLORS.primaryDim }]}>
+              <Text style={styles.metricLabel}>PESO ACTUAL</Text>
+              <View style={styles.metricValueRow}>
+                <Text style={styles.metricValue}>
+                  {measurements?.weight_kg != null ? measurements.weight_kg : '—'}
+                </Text>
+                <Text style={styles.metricUnit}>KG</Text>
+              </View>
             </View>
-          </View>
 
-          <View style={[styles.metricRow, { borderLeftColor: COLORS.secondary }]}>
-            <Text style={styles.metricLabel}>GRASA CORPORAL</Text>
-            <View style={styles.metricValueRow}>
-              <Text style={styles.metricValue}>
-                {measurements?.body_fat_pct != null ? measurements.body_fat_pct : '—'}
-              </Text>
-              <Text style={styles.metricUnit}>%</Text>
+            <View style={[styles.metricCell, { borderLeftColor: COLORS.secondary }]}>
+              <Text style={styles.metricLabel}>GRASA CORP.</Text>
+              <View style={styles.metricValueRow}>
+                <Text style={styles.metricValue}>
+                  {measurements?.body_fat_pct != null ? measurements.body_fat_pct : '—'}
+                </Text>
+                <Text style={styles.metricUnit}>%</Text>
+              </View>
             </View>
-          </View>
 
-          <View style={[styles.metricRow, { borderLeftColor: COLORS.text }]}>
-            <Text style={styles.metricLabel}>CINTURA</Text>
-            <View style={styles.metricValueRow}>
-              <Text style={styles.metricValue}>
-                {measurements?.waist_cm != null ? measurements.waist_cm : '—'}
-              </Text>
-              <Text style={styles.metricUnit}>CM</Text>
+            <View style={[styles.metricCell, { borderLeftColor: COLORS.text }]}>
+              <Text style={styles.metricLabel}>CINTURA</Text>
+              <View style={styles.metricValueRow}>
+                <Text style={styles.metricValue}>
+                  {measurements?.waist_cm != null ? measurements.waist_cm : '—'}
+                </Text>
+                <Text style={styles.metricUnit}>CM</Text>
+              </View>
             </View>
           </View>
 
@@ -471,7 +478,7 @@ const styles = StyleSheet.create({
   profileHeader: { alignItems: 'center', marginBottom: 32 },
   avatarWrapper: { position: 'relative', marginBottom: 16 },
   avatar: {
-    width: 120, height: 120, borderRadius: 60,
+    width: 120, height: 120, borderRadius: 18,
     borderWidth: 2, borderColor: 'rgba(209,255,38,0.3)',
   },
   avatarPlaceholder: {
@@ -489,18 +496,18 @@ const styles = StyleSheet.create({
 
   // Quick actions
   actionsGrid: {
-    flexDirection: 'row', flexWrap: 'wrap',
-    gap: 12, marginBottom: 28,
+    flexDirection: 'row',
+    gap: 8, marginBottom: 28,
   },
   actionCard: {
-    width: (width - 48 - 12) / 2,
-    height: 110,
+    flex: 1,
+    paddingVertical: 14,
     backgroundColor: COLORS.surfaceLow,
     borderRadius: 12,
-    borderWidth: 1, borderColor: COLORS.borderLight,
-    justifyContent: 'center', alignItems: 'center', gap: 10,
+    borderWidth: 1, borderColor: 'rgba(209,255,38,0.18)',
+    justifyContent: 'center', alignItems: 'center', gap: 6,
   },
-  actionLabel: { fontSize: 9, fontWeight: '700', color: COLORS.text, letterSpacing: 1.5 },
+  actionLabel: { fontSize: 8, fontWeight: '700', color: COLORS.primary, letterSpacing: 1 },
 
   // Composition card
   compositionCard: {
@@ -519,19 +526,22 @@ const styles = StyleSheet.create({
     shadowColor: COLORS.primary, shadowOpacity: 0.6, shadowRadius: 8,
   },
   compositionTitle: {
-    fontSize: 26, fontWeight: '900', color: COLORS.text,
-    letterSpacing: -0.5, lineHeight: 30, marginBottom: 16,
+    fontSize: 22, fontWeight: '900', color: COLORS.text,
+    letterSpacing: -0.5, lineHeight: 28, marginBottom: 14,
   },
-  metricRow: {
-    paddingHorizontal: 14, paddingVertical: 12,
+  metricsRow: {
+    flexDirection: 'row', gap: 8, marginBottom: 10,
+  },
+  metricCell: {
+    flex: 1,
+    paddingHorizontal: 10, paddingVertical: 10,
     backgroundColor: COLORS.surfaceHigh,
     borderRadius: 8, borderLeftWidth: 2,
-    marginBottom: 10,
   },
-  metricLabel: { fontSize: 9, fontWeight: '700', color: COLORS.textVariant, letterSpacing: 1.2, marginBottom: 4 },
-  metricValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
-  metricValue: { fontSize: 32, fontWeight: '700', color: COLORS.text },
-  metricUnit: { fontSize: 11, color: COLORS.textDim, fontWeight: '600' },
+  metricLabel: { fontSize: 8, fontWeight: '700', color: COLORS.textVariant, letterSpacing: 1, marginBottom: 4 },
+  metricValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },
+  metricValue: { fontSize: 22, fontWeight: '700', color: COLORS.text },
+  metricUnit: { fontSize: 10, color: COLORS.textDim, fontWeight: '600' },
   updateBtn: {
     marginTop: 8, paddingVertical: 14,
     backgroundColor: COLORS.primary, borderRadius: 10, alignItems: 'center',
