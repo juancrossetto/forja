@@ -69,7 +69,7 @@ export const MainTabs: React.FC = () => {
         <Tab.Screen
           name="HomeStack"
           component={HomeStack}
-          options={{ title: 'Inicio' }}
+          options={{ title: 'Comunidad' }}
         />
         <Tab.Screen
           name="TrainingStack"
@@ -97,7 +97,7 @@ export const MainTabs: React.FC = () => {
         <Tab.Screen
           name="NutritionStack"
           component={NutritionStack}
-          options={{ title: 'Comidas' }}
+          options={{ title: 'Alimentación' }}
         />
         <Tab.Screen
           name="ProgressStack"
@@ -120,7 +120,18 @@ export const MainTabs: React.FC = () => {
           visible={addMenuVisible}
           onClose={closeMenu}
           onSelectTraining={() => navigateFromMenu('TrainingStack', 'Entrenamientos')}
-          onSelectFood={() => navigateFromMenu('NutritionStack', 'RegistrarComida')}
+          onSelectFood={() => {
+            setAddMenuVisible(false);
+            setTimeout(() => {
+              navigation.navigate('Main' as any, {
+                screen: 'NutritionStack',
+                params: {
+                  screen: 'Alimentacion',
+                  params: { initialSubTab: 'buscar' },
+                },
+              });
+            }, 100);
+          }}
           onSelectWater={() => navigateFromMenu('HomeStack', 'Hidratacion')}
           onSelectPhotos={() => navigateFromMenu('HomeStack', 'CargarFotos')}
           onSelectMeasurements={() => navigateFromMenu('HomeStack', 'PesoYMedidas')}

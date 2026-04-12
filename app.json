@@ -41,6 +41,13 @@
           "cameraPermission": "Método R3SET necesita acceso a tu cámara para tomar fotos de progreso."
         }
       ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Método R3SET usa el micrófono para registrar comidas por voz.",
+          "speechRecognitionPermission": "Método R3SET usa el reconocimiento de voz para convertir lo que decís en texto."
+        }
+      ],
       "expo-camera",
       "expo-web-browser",
       "expo-apple-authentication",

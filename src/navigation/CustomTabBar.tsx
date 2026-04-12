@@ -26,10 +26,10 @@ interface TabItem {
 }
 
 const TABS: TabItem[] = [
-  { name: 'HomeStack',     label: 'Inicio',  iconActive: 'home',           iconInactive: 'home-outline' },
+  { name: 'HomeStack',     label: 'Comunidad', iconActive: 'people',       iconInactive: 'people-outline' },
   { name: 'TrainingStack', label: 'Entreno', iconActive: 'barbell',        iconInactive: 'barbell-outline' },
   { name: 'AddMenu',       label: '',        iconActive: 'add',            iconInactive: 'add', isFab: true },
-  { name: 'NutritionStack',label: 'Comidas', iconActive: 'restaurant',     iconInactive: 'restaurant-outline' },
+  { name: 'NutritionStack', label: 'Alimentación', iconActive: 'restaurant', iconInactive: 'restaurant-outline' },
   { name: 'ProgressStack', label: 'Progreso',iconActive: 'stats-chart',    iconInactive: 'stats-chart-outline' },
 ];
 

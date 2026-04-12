@@ -68,9 +68,16 @@ export type HomeStackParamList = {
 };
 
 // Nutrition Stack Types
+export type AlimentacionSubTab = 'recetas' | 'lista' | 'buscar' | 'escaner' | 'voz';
+
 export type NutritionStackParamList = {
-  Comidas: undefined;
-  RegistrarComida: undefined;
+  Alimentacion:
+    | {
+        initialSubTab?: AlimentacionSubTab;
+        /** Prefill búsqueda (p. ej. voz → Buscar) */
+        buscarQuery?: string;
+      }
+    | undefined;
   DetalleComida?: {
     mealId: string;
     mealName: string;
