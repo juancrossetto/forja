@@ -15,7 +15,8 @@ import {
   Platform,
   Animated,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AppProgressiveHeader, HEADER_ROW_HEIGHT } from '../../components/AppProgressiveHeader';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -188,6 +189,7 @@ const HomeScreen: React.FC = () => {
   const navigation = useNavigation<Nav>();
   const user = useAuthStore((s) => s.user);
   const setActiveDate = useUIStore((s) => s.setActiveDate);
+  const insets = useSafeAreaInsets();
 
   const calendarDays = useMemo(() => generateDays(), []);
   const calendarRef = useRef<FlatList>(null);
@@ -203,6 +205,7 @@ const HomeScreen: React.FC = () => {
   const [goals, setGoals] = useState<DailyGoal[]>([]);
   const [goalsLoading, setGoalsLoading] = useState(true);
   const progressAnim = useRef(new Animated.Value(0)).current;
+  const scrollY = useRef(new Animated.Value(0)).current;
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [pickerDate, setPickerDate] = useState(new Date());
 
@@ -377,29 +380,8 @@ const HomeScreen: React.FC = () => {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Fixed Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={() => navigation.navigate('Perfil')}>
-            <MaterialCommunityIcons name="menu" size={24} color={COLORS.primary} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>MÉTODO R3SET</Text>
-        </View>
-        <TouchableOpacity onPress={() => navigation.navigate('Perfil')}>
-          {avatarUrl ? (
-            <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
-          ) : (
-            <View style={styles.avatarPlaceholder}>
-              <Text style={styles.avatarInitial}>
-                {(user?.name?.[0] ?? user?.email?.[0] ?? 'U').toUpperCase()}
-              </Text>
-            </View>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView
+    <View style={styles.container}>
+      <Animated.ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -410,6 +392,12 @@ const HomeScreen: React.FC = () => {
           />
         }
         scrollIndicatorInsets={{ bottom: 80 }}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true },
+        )}
+        scrollEventThrottle={16}
+        contentContainerStyle={{ paddingTop: insets.top + HEADER_ROW_HEIGHT }}
       >
         {/* Date Header */}
         <View style={styles.dateSection}>
@@ -587,7 +575,7 @@ const HomeScreen: React.FC = () => {
 
           <View style={{ height: 100 }} />
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
 
       {/* Date Picker Modal */}
       <Modal visible={showDatePicker} transparent animationType="fade" onRequestClose={() => setShowDatePicker(false)}>
@@ -631,7 +619,17 @@ const HomeScreen: React.FC = () => {
           </View>
         </TouchableOpacity>
       </Modal>
-    </SafeAreaView>
+
+      {/* Progressive blur header — rendered last so it layers on top */}
+      <AppProgressiveHeader
+        scrollY={scrollY}
+        topInset={insets.top}
+        onHomePress={() => navigation.navigate('Inicio')}
+        onAvatarPress={() => navigation.navigate('Perfil')}
+        avatarUrl={avatarUrl}
+        avatarInitial={(user?.name?.[0] ?? user?.email?.[0] ?? 'U').toUpperCase()}
+      />
+    </View>
   );
 };
 
@@ -639,6 +637,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.bg,
+    // Content extends edge-to-edge; AppProgressiveHeader handles the top inset.
   },
   header: {
     flexDirection: 'row',

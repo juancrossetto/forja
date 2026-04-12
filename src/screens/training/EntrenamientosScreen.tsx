@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,10 +6,14 @@ import {
   ScrollView,
   FlatList,
   TouchableOpacity,
+  Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTrainingStore } from '../../store/trainingStore';
 import type { TrainingPhase } from '../../types';
+import { getProfile } from '../../services/profileService';
+import { AppProgressiveHeader, HEADER_ROW_HEIGHT } from '../../components/AppProgressiveHeader';
 
 // Color palette
 const colors = {
@@ -82,10 +86,17 @@ export const EntrenamientosScreen: React.FC<Props> = ({ navigation }) => {
   const currentPhase = useTrainingStore((s) => s.currentPhase);
   const loadTrainingCatalog = useTrainingStore((s) => s.loadTrainingCatalog);
   const isLoading = useTrainingStore((s) => s.isLoading);
+  const insets = useSafeAreaInsets();
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   useEffect(() => {
     loadTrainingCatalog();
   }, [loadTrainingCatalog]);
+
+  useEffect(() => {
+    getProfile().then((p) => { if (p?.avatar_url) setAvatarUrl(p.avatar_url); });
+  }, []);
 
   const scheduleDays = useMemo(() => {
     if (currentPhase?.days?.length) {
@@ -180,9 +191,15 @@ export const EntrenamientosScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <ScrollView
+      <Animated.ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true },
+        )}
+        scrollEventThrottle={16}
+        contentContainerStyle={{ paddingTop: insets.top + HEADER_ROW_HEIGHT }}
       >
         {/* Header */}
         <View style={styles.header}>
@@ -279,7 +296,15 @@ export const EntrenamientosScreen: React.FC<Props> = ({ navigation }) => {
             />
           )}
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
+
+      <AppProgressiveHeader
+        scrollY={scrollY}
+        topInset={insets.top}
+        onHomePress={() => (navigation as any).getParent()?.navigate('HomeStack', { screen: 'Inicio' })}
+        onAvatarPress={() => (navigation as any).getParent()?.navigate('HomeStack', { screen: 'Perfil' })}
+        avatarUrl={avatarUrl}
+      />
     </View>
   );
 };

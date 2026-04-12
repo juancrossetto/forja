@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,12 @@ import {
   TouchableOpacity,
   Switch,
   Dimensions,
+  Animated,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getProfile } from '../../services/profileService';
+import { AppProgressiveHeader, HEADER_ROW_HEIGHT } from '../../components/AppProgressiveHeader';
 
 const { width } = Dimensions.get('window');
 
@@ -100,8 +105,16 @@ const SHOPPING_ITEMS: ShoppingItem[] = [
 ];
 
 const ComidasScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState(2);
   const [meals, setMeals] = useState<Meal[]>(MEALS);
+
+  useEffect(() => {
+    getProfile().then((p) => { if (p?.avatar_url) setAvatarUrl(p.avatar_url); });
+  }, []);
 
   const toggleMealCompletion = (mealId: string) => {
     setMeals(prevMeals =>
@@ -189,7 +202,15 @@ const ComidasScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <Animated.ScrollView
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true },
+        )}
+        scrollEventThrottle={16}
+        contentContainerStyle={{ paddingTop: insets.top + HEADER_ROW_HEIGHT }}
+      >
         {/* Day Scroller */}
         <View style={styles.dayScrollerContainer}>
           <FlatList
@@ -253,7 +274,15 @@ const ComidasScreen: React.FC = () => {
         </View>
 
         <View style={styles.bottomSpacer} />
-      </ScrollView>
+      </Animated.ScrollView>
+
+      <AppProgressiveHeader
+        scrollY={scrollY}
+        topInset={insets.top}
+        onHomePress={() => navigation.getParent()?.navigate('HomeStack', { screen: 'Inicio' })}
+        onAvatarPress={() => navigation.getParent()?.navigate('HomeStack', { screen: 'Perfil' })}
+        avatarUrl={avatarUrl}
+      />
     </View>
   );
 };

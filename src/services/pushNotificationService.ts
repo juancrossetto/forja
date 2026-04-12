@@ -1,4 +1,3 @@
-import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
@@ -6,16 +5,42 @@ import { supabase } from '../lib/supabase';
 
 /* ── Config ── */
 
-// Set default notification behavior (show when app is in foreground)
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+/** En Expo Go el módulo remoto de push está limitado; evitamos importarlo para no spamear WARN en consola. */
+const isExpoGo = Constants.appOwnership === 'expo';
+
+type NotificationsModule = typeof import('expo-notifications');
+
+let notificationsLoad: Promise<NotificationsModule | null> | null = null;
+
+function loadNotificationsModule(): Promise<NotificationsModule | null> {
+  if (isExpoGo) {
+    return Promise.resolve(null);
+  }
+  if (!notificationsLoad) {
+    notificationsLoad = import('expo-notifications').catch(() => null);
+  }
+  return notificationsLoad;
+}
+
+let handlerInitialized = false;
+
+async function ensureNotificationHandler(): Promise<NotificationsModule | null> {
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications || handlerInitialized) {
+    return Notifications;
+  }
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+  handlerInitialized = true;
+  return Notifications;
+}
 
 /* ── Types ── */
 
@@ -32,12 +57,19 @@ export interface PushTokenRecord {
  * Call this on app startup after user is authenticated.
  */
 export async function registerForPushNotifications(): Promise<string | null> {
-  if (!Device.isDevice) {
-    console.log('Push notifications require a physical device');
+  if (isExpoGo) {
     return null;
   }
 
-  // Check/request permission
+  if (!Device.isDevice) {
+    return null;
+  }
+
+  const Notifications = await ensureNotificationHandler();
+  if (!Notifications) {
+    return null;
+  }
+
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
 
@@ -47,11 +79,9 @@ export async function registerForPushNotifications(): Promise<string | null> {
   }
 
   if (finalStatus !== 'granted') {
-    console.log('Push notification permission not granted');
     return null;
   }
 
-  // Android needs a notification channel
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('goals', {
       name: 'Metas completadas',
@@ -62,13 +92,9 @@ export async function registerForPushNotifications(): Promise<string | null> {
     });
   }
 
-  // Get the Expo push token
   try {
     const projectId = getExpoProjectId();
     if (!projectId) {
-      console.warn(
-        'Push notifications disabled: missing EAS projectId. Configure expo.extra.eas.projectId in app config.',
-      );
       return null;
     }
     const tokenData = await Notifications.getExpoPushTokenAsync({
@@ -76,25 +102,30 @@ export async function registerForPushNotifications(): Promise<string | null> {
     });
     const token = tokenData.data;
 
-    // Save to Supabase
     await saveTokenToDatabase(token);
 
     return token;
-  } catch (e) {
-    console.error('Error getting push token:', e);
+  } catch {
     return null;
   }
 }
 
 /**
  * Send a local notification when a goal is completed.
- * This works immediately even when the app is in foreground.
- * The remote push (Edge Function) handles the case when app is closed.
  */
 export async function sendGoalCompletedNotification(
   goalTitle: string,
   currentValue?: number,
 ): Promise<void> {
+  if (isExpoGo) {
+    return;
+  }
+
+  const Notifications = await ensureNotificationHandler();
+  if (!Notifications) {
+    return;
+  }
+
   await Notifications.scheduleNotificationAsync({
     content: {
       title: 'Meta cumplida!',
@@ -103,33 +134,51 @@ export async function sendGoalCompletedNotification(
       sound: 'default',
       ...(Platform.OS === 'android' ? { channelId: 'goals' } : {}),
     },
-    trigger: null, // Immediately
+    trigger: null,
   });
 }
 
 /**
  * Add a notification response listener (when user taps a notification).
- * Returns a cleanup function.
  */
 export function addNotificationResponseListener(
   callback: (goalTitle: string) => void,
 ): () => void {
-  const subscription = Notifications.addNotificationResponseReceivedListener(
-    (response) => {
+  if (isExpoGo) {
+    return () => {};
+  }
+
+  let removed = false;
+  let subscription: { remove: () => void } | undefined;
+
+  void loadNotificationsModule().then((Notifications) => {
+    if (!Notifications || removed) return;
+    subscription = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data;
       if (data?.type === 'goal_completed') {
         callback(data.goalTitle as string);
       }
-    },
-  );
-  return () => subscription.remove();
+    });
+  });
+
+  return () => {
+    removed = true;
+    subscription?.remove();
+  };
 }
 
 /**
  * Remove push token from DB (e.g., on logout).
  */
 export async function unregisterPushToken(): Promise<void> {
+  if (isExpoGo) {
+    return;
+  }
+
   try {
+    const Notifications = await loadNotificationsModule();
+    if (!Notifications) return;
+
     const projectId = getExpoProjectId();
     if (!projectId) {
       return;
@@ -146,8 +195,8 @@ export async function unregisterPushToken(): Promise<void> {
       .delete()
       .eq('user_id', userId)
       .eq('expo_token', token);
-  } catch (e) {
-    console.error('Error unregistering push token:', e);
+  } catch {
+    // ignore
   }
 }
 
@@ -171,14 +220,14 @@ async function saveTokenToDatabase(token: string): Promise<void> {
       { onConflict: 'user_id,expo_token' },
     );
 
-  if (error) {
-    console.error('Error saving push token:', error.message);
+  if (error && __DEV__) {
+    console.warn('[push]', error.message);
   }
 }
 
 function getExpoProjectId(): string | undefined {
   const projectIdFromExpoConfig = Constants.expoConfig?.extra?.eas?.projectId;
   const projectIdFromEasConfig = Constants.easConfig?.projectId;
-
-  return projectIdFromExpoConfig ?? projectIdFromEasConfig;
+  const id = projectIdFromExpoConfig ?? projectIdFromEasConfig;
+  return typeof id === 'string' && id.length > 0 ? id : undefined;
 }

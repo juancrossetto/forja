@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,9 +6,13 @@ import {
   ScrollView,
   TouchableOpacity,
   Dimensions,
+  Animated,
 } from 'react-native';
 import Svg, { Path, Circle, Rect, Polygon } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useProgressStore } from '../../store/progressStore';
+import { getProfile } from '../../services/profileService';
+import { AppProgressiveHeader, HEADER_ROW_HEIGHT } from '../../components/AppProgressiveHeader';
 
 const { width } = Dimensions.get('window');
 const CARD_PADDING = 16;
@@ -37,10 +41,17 @@ const ProgresoScreen: React.FC<Props> = ({ navigation }) => {
   const measurements = useProgressStore((s) => s.measurements);
   const todayGoals = useProgressStore((s) => s.todayGoals);
   const isStale = useProgressStore((s) => s.isStale);
+  const insets = useSafeAreaInsets();
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   useEffect(() => {
     void loadProgressData();
   }, [loadProgressData]);
+
+  useEffect(() => {
+    getProfile().then((p) => { if (p?.avatar_url) setAvatarUrl(p.avatar_url); });
+  }, []);
 
   const latestM = measurements[0] ?? null;
   const prevM = measurements[1] ?? null;
@@ -90,7 +101,15 @@ const ProgresoScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <View style={s.root}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
+      <Animated.ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[s.scroll, { paddingTop: insets.top + HEADER_ROW_HEIGHT }]}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true },
+        )}
+        scrollEventThrottle={16}
+      >
         {/* ── Offline banner ─────────────────────────────────────── */}
         {isStale && (
           <View style={s.offlineBanner}>
@@ -252,7 +271,7 @@ const ProgresoScreen: React.FC<Props> = ({ navigation }) => {
         </View>
 
         <View style={{ height: 120 }} />
-      </ScrollView>
+      </Animated.ScrollView>
 
       {/* ── FAB Registrar ───────────────────────────────────────── */}
       <TouchableOpacity
@@ -261,6 +280,14 @@ const ProgresoScreen: React.FC<Props> = ({ navigation }) => {
       >
         <Text style={s.fabText}>+ Registrar</Text>
       </TouchableOpacity>
+
+      <AppProgressiveHeader
+        scrollY={scrollY}
+        topInset={insets.top}
+        onHomePress={() => (navigation as any).getParent()?.navigate('HomeStack', { screen: 'Inicio' })}
+        onAvatarPress={() => (navigation as any).getParent()?.navigate('HomeStack', { screen: 'Perfil' })}
+        avatarUrl={avatarUrl}
+      />
     </View>
   );
 };

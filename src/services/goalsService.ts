@@ -70,7 +70,12 @@ export async function getGoalsForDate(date: Date): Promise<DailyGoal[]> {
       p_date: dateStr,
     });
 
-    if (assignErr) {
+    // 23505 = filas ya existentes (carrera o migración antigua); seguimos y re-fetch
+    const isDuplicate =
+      assignErr?.code === '23505' ||
+      assignErr?.message?.includes('duplicate key') === true;
+
+    if (assignErr && !isDuplicate) {
       console.error('Error assigning template goals:', assignErr.message);
       return [];
     }
