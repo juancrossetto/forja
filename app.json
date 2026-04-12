@@ -18,7 +18,12 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.metodo.r3set",
-      "usesAppleSignIn": true
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "NSMotionUsageDescription": "Usamos el sensor de movimiento para contar tus pasos y mostrarte tu actividad del día en tiempo real.",
+        "NSHealthShareUsageDescription": "Leemos tus pasos y actividad de Apple Health para que puedas ver tu progreso diario sin cargar nada a mano.",
+        "NSHealthUpdateUsageDescription": "Registramos tus entrenamientos en Apple Health para que tengas todo tu historial de actividad en un solo lugar."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -44,6 +49,13 @@
         {
           "icon": "./assets/notification-icon.png",
           "color": "#D1FF26"
+        }
+      ],
+      [
+        "react-native-health",
+        {
+          "healthSharePermission": "Leemos tus pasos, frecuencia cardíaca y calorías de Apple Health para mostrarte tu actividad diaria sin cargar nada a mano.",
+          "healthUpdatePermission": "Registramos tus entrenamientos en Apple Health para que tengas todo tu historial en un solo lugar."
         }
       ]
     ]

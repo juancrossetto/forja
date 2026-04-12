@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -9,6 +9,9 @@ import {
   Dimensions,
   ActivityIndicator,
   Alert,
+  AppState,
+  AppStateStatus,
+  Linking,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +19,16 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuthStore } from '../../store/authStore';
 import { getProfile, getMemberSinceYear, uploadAvatar, type UserProfile } from '../../services/profileService';
 import { getMeasurementHistory, type BodyMeasurement } from '../../services/measurementsService';
+import {
+  getHealthStatus,
+  requestHealthPermissions,
+  getHealthSummaryToday,
+  startHealthSync,
+  stopHealthSync,
+  healthStatusLabel,
+  type HealthSummary,
+  type HealthPermissions,
+} from '../../services/healthService';
 
 const { width } = Dimensions.get('window');
 
@@ -43,21 +56,27 @@ const QUICK_ACTIONS = [
   { label: 'COMPARTIR',  icon: 'share-variant',   color: COLORS.text       },
 ] as const;
 
-const DEVICES = [
-  { name: 'Apple Watch', icon: 'watch',       status: 'connected', statusText: 'CONECTADO'      },
-  { name: 'Fitbit',      icon: 'heart-pulse', status: 'pending',   statusText: 'VINCULAR CUENTA' },
-  { name: 'Garmin',      icon: 'navigation',  status: 'pending',   statusText: 'VINCULAR CUENTA' },
-] as const;
-
 const ProfileScreen: React.FC = () => {
-  const insets = useSafeAreaInsets();
-  const logout = useAuthStore((state) => state.logout);
+  const insets            = useSafeAreaInsets();
+  const logout            = useAuthStore((s) => s.logout);
+  const setAvatarUrl      = useAuthStore((s) => s.setAvatarUrl);
+  const setWatchConnected = useAuthStore((s) => s.setWatchConnected);
+  const storeSteps        = useAuthStore((s) => s.steps);
 
   const [profile, setProfile]           = useState<UserProfile | null>(null);
   const [measurements, setMeasurements] = useState<BodyMeasurement | null>(null);
   const [memberYear, setMemberYear]     = useState('');
   const [loading, setLoading]           = useState(true);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  // Health state
+  const [healthPermission, setHealthPermission] = useState<HealthPermissions['steps']>('undetermined');
+  const [healthData, setHealthData]   = useState<HealthSummary>({
+    steps: null, heartRate: null, calories: null, lastSyncedAt: null,
+  });
+  const [healthLoading, setHealthLoading] = useState(false);
+
+  /* ── Avatar ── */
 
   const handleChangeAvatar = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -74,10 +93,70 @@ const ProfileScreen: React.FC = () => {
 
     if (url) {
       setProfile((prev) => prev ? { ...prev, avatar_url: url } : prev);
+      setAvatarUrl(url); // sync to shared store → header updates on all tabs
     } else {
       Alert.alert('Error', 'No se pudo actualizar la foto. Intentá de nuevo.');
     }
   };
+
+  /* ── Health sync ── */
+
+  const initHealth = useCallback(async () => {
+    const status = await getHealthStatus();
+    const perm = status.permissions.steps;
+    setHealthPermission(perm);
+
+    if (perm === 'granted') {
+      setWatchConnected(true);
+      setHealthLoading(true);
+      // Load HR and calories (steps come from the global sync in MainTabs)
+      const summary = await getHealthSummaryToday();
+      setHealthData((prev) => ({ ...prev, heartRate: summary.heartRate, calories: summary.calories, lastSyncedAt: summary.lastSyncedAt }));
+      setHealthLoading(false);
+    }
+  }, [setWatchConnected]);
+
+  const handleConnectAppleWatch = async () => {
+    if (healthPermission === 'denied') {
+      Alert.alert(
+        'Acceso restringido',
+        'Para ver tus pasos y actividad diaria, necesitamos permiso de Movimiento y actividad física.\n\nPodés habilitarlo en:\nAjustes → Privacidad y seguridad → Movimiento y actividad física → Método R3SET',
+        [
+          { text: 'Ahora no', style: 'cancel' },
+          { text: 'Ir a Ajustes', onPress: () => Linking.openURL('app-settings:') },
+        ],
+      );
+      return;
+    }
+
+    setHealthLoading(true);
+    const status = await requestHealthPermissions();
+    const perm = status.permissions.steps;
+    setHealthPermission(perm);
+
+    if (perm === 'granted') {
+      setWatchConnected(true);
+      const summary = await getHealthSummaryToday();
+      setHealthData((prev) => ({ ...prev, heartRate: summary.heartRate, calories: summary.calories, lastSyncedAt: summary.lastSyncedAt }));
+    } else {
+      setWatchConnected(false);
+    }
+    setHealthLoading(false);
+  };
+
+  /* ── App state: re-sync steps when app comes to foreground ── */
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', async (next: AppStateStatus) => {
+      if (next === 'active' && healthPermission === 'granted') {
+        const summary = await getHealthSummaryToday();
+        setHealthData(summary);
+      }
+    });
+    return () => sub.remove();
+  }, [healthPermission]);
+
+  /* ── Initial data load ── */
 
   useEffect(() => {
     (async () => {
@@ -91,7 +170,23 @@ const ProfileScreen: React.FC = () => {
       setMemberYear(year);
       setLoading(false);
     })();
-  }, []);
+
+    initHealth();
+  }, [initHealth]);
+
+  /* ── Derived health display values ── */
+
+  const watchStatusText  = healthStatusLabel(healthPermission);
+  const watchIsConnected = healthPermission === 'granted';
+  const watchIsDenied    = healthPermission === 'denied';
+
+  const stepsDisplay    = storeSteps != null ? storeSteps.toLocaleString('es-AR') : '—';
+  const hrDisplay       = healthData.heartRate != null ? `${healthData.heartRate}` : '—';
+  const calDisplay      = healthData.calories  != null ? `${Math.round(healthData.calories)}` : '—';
+
+  const lastSyncLabel = healthData.lastSyncedAt
+    ? healthData.lastSyncedAt.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+    : null;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -141,26 +236,22 @@ const ProfileScreen: React.FC = () => {
 
         {/* ── Body Composition ── */}
         <View style={styles.compositionCard}>
-          {/* Silhouette + dots */}
           <View style={styles.silhouetteBox}>
             <Image
               source={{ uri: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCWHXsYXnDZ8d83QuAQtF3p01zCCyADhIWspMTj2Lu0H4IoR1nUV4_G6b8NNgrhk7gfh5XxArX8cyswqK1MY09uX2FXoFAVeNDyTkI3Gbkt6tng7sJA16P9rkpC6fUJKDYLoBAcbh7scfGV14lBARtFwB2meJZbzEXul0Wk7_4pBpHfwUbSDUv67cZugrjX1nyo7GSqfsEmmJKmL5EDUD0f-u0jn50BcfqecqhlLD7fBQEEx-KM36GVX0-jrHI30gm2JuY-2Kh6XNun' }}
               style={styles.silhouetteImage}
               resizeMode="contain"
             />
-            {/* Hotspot dots — posiciones equivalentes a PesoYMedidasScreen */}
             <View style={[styles.dot, { top: '24%', left: '44%', backgroundColor: COLORS.primaryDim }]} />
             <View style={[styles.dot, { top: '34%', left: '60%', backgroundColor: COLORS.secondary   }]} />
             <View style={[styles.dot, { top: '40%', left: '46%', backgroundColor: COLORS.primaryDim }]} />
             <View style={[styles.dot, { top: '68%', left: '43%', backgroundColor: COLORS.secondary   }]} />
           </View>
 
-          {/* Title */}
           <Text style={styles.compositionTitle}>
             COMPOSICIÓN{'\n'}<Text style={{ color: COLORS.primaryDim }}>CORPORAL</Text>
           </Text>
 
-          {/* Metrics */}
           <View style={[styles.metricRow, { borderLeftColor: COLORS.primaryDim }]}>
             <Text style={styles.metricLabel}>PESO ACTUAL</Text>
             <View style={styles.metricValueRow}>
@@ -199,26 +290,125 @@ const ProfileScreen: React.FC = () => {
         {/* ── Devices ── */}
         <View style={styles.devicesSection}>
           <Text style={styles.sectionLabel}>DISPOSITIVOS VINCULADOS</Text>
-          {DEVICES.map((d) => (
-            <TouchableOpacity key={d.name} style={styles.deviceCard} activeOpacity={0.7}>
-              <View style={styles.deviceLeft}>
-                <View style={styles.deviceIconBox}>
-                  <MaterialCommunityIcons name={d.icon as any} size={20} color={COLORS.text} />
-                </View>
-                <View>
-                  <Text style={styles.deviceName}>{d.name}</Text>
-                  <Text style={[styles.deviceStatus, d.status === 'connected' && styles.deviceStatusConnected]}>
-                    {d.statusText}
-                  </Text>
-                </View>
+
+          {/* Apple Watch — real connection state */}
+          <TouchableOpacity
+            style={styles.deviceCard}
+            activeOpacity={0.7}
+            onPress={!watchIsConnected ? handleConnectAppleWatch : undefined}
+            disabled={healthLoading}
+          >
+            <View style={styles.deviceLeft}>
+              <View style={[
+                styles.deviceIconBox,
+                watchIsConnected && styles.deviceIconBoxActive,
+              ]}>
+                <MaterialCommunityIcons name="watch" size={20} color={watchIsConnected ? COLORS.primary : COLORS.text} />
               </View>
-              {d.status === 'connected'
-                ? <MaterialCommunityIcons name="check-circle" size={20} color={COLORS.primaryDim} />
-                : <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.textDim} />
-              }
-            </TouchableOpacity>
-          ))}
+              <View>
+                <Text style={styles.deviceName}>Apple Watch</Text>
+                <Text style={[
+                  styles.deviceStatus,
+                  watchIsConnected && styles.deviceStatusConnected,
+                  watchIsDenied   && styles.deviceStatusDenied,
+                ]}>
+                  {healthLoading ? 'SINCRONIZANDO…' : watchStatusText}
+                </Text>
+              </View>
+            </View>
+            {healthLoading ? (
+              <ActivityIndicator size="small" color={COLORS.primaryDim} />
+            ) : watchIsConnected ? (
+              <MaterialCommunityIcons name="check-circle" size={20} color={COLORS.primaryDim} />
+            ) : (
+              <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.textDim} />
+            )}
+          </TouchableOpacity>
+
+          {/* Fitbit */}
+          <TouchableOpacity style={styles.deviceCard} activeOpacity={0.7}>
+            <View style={styles.deviceLeft}>
+              <View style={styles.deviceIconBox}>
+                <MaterialCommunityIcons name="heart-pulse" size={20} color={COLORS.text} />
+              </View>
+              <View>
+                <Text style={styles.deviceName}>Fitbit</Text>
+                <Text style={styles.deviceStatus}>VINCULAR CUENTA</Text>
+              </View>
+            </View>
+            <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.textDim} />
+          </TouchableOpacity>
+
+          {/* Garmin */}
+          <TouchableOpacity style={styles.deviceCard} activeOpacity={0.7}>
+            <View style={styles.deviceLeft}>
+              <View style={styles.deviceIconBox}>
+                <MaterialCommunityIcons name="navigation" size={20} color={COLORS.text} />
+              </View>
+              <View>
+                <Text style={styles.deviceName}>Garmin</Text>
+                <Text style={styles.deviceStatus}>VINCULAR CUENTA</Text>
+              </View>
+            </View>
+            <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.textDim} />
+          </TouchableOpacity>
         </View>
+
+        {/* ── Apple Health Data Card ── */}
+        {watchIsConnected && (
+          <View style={styles.healthCard}>
+            <View style={styles.healthCardHeader}>
+              <View style={styles.healthCardTitleRow}>
+                <MaterialCommunityIcons name="heart-pulse" size={16} color={COLORS.primary} />
+                <Text style={styles.healthCardTitle}>APPLE HEALTH</Text>
+              </View>
+              {lastSyncLabel && (
+                <Text style={styles.healthSyncTime}>Actualizado {lastSyncLabel}</Text>
+              )}
+            </View>
+
+            <View style={styles.healthMetricsRow}>
+              {/* Steps */}
+              <View style={styles.healthMetric}>
+                <MaterialCommunityIcons name="walk" size={22} color={COLORS.primaryDim} />
+                <Text style={styles.healthMetricValue}>{stepsDisplay}</Text>
+                <Text style={styles.healthMetricLabel}>PASOS</Text>
+              </View>
+
+              <View style={styles.healthMetricDivider} />
+
+              {/* Heart rate */}
+              <View style={styles.healthMetric}>
+                <MaterialCommunityIcons name="heart" size={22} color={COLORS.tertiary} />
+                <View style={styles.healthMetricValueRow}>
+                  <Text style={[styles.healthMetricValue, healthData.heartRate == null && styles.healthMetricDim]}>
+                    {hrDisplay}
+                  </Text>
+                  {healthData.heartRate != null && (
+                    <Text style={styles.healthMetricUnit}>bpm</Text>
+                  )}
+                </View>
+                <Text style={styles.healthMetricLabel}>FRECUENCIA</Text>
+              </View>
+
+              <View style={styles.healthMetricDivider} />
+
+              {/* Calories */}
+              <View style={styles.healthMetric}>
+                <MaterialCommunityIcons name="fire" size={22} color={COLORS.secondary} />
+                <View style={styles.healthMetricValueRow}>
+                  <Text style={[styles.healthMetricValue, healthData.calories == null && styles.healthMetricDim]}>
+                    {calDisplay}
+                  </Text>
+                  {healthData.calories != null && (
+                    <Text style={styles.healthMetricUnit}>kcal</Text>
+                  )}
+                </View>
+                <Text style={styles.healthMetricLabel}>CALORÍAS</Text>
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* ── Current Plan ── */}
         {profile?.plan_name ? (
@@ -362,9 +552,41 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.05)',
     justifyContent: 'center', alignItems: 'center',
   },
+  deviceIconBoxActive: {
+    backgroundColor: 'rgba(209,255,38,0.12)',
+  },
   deviceName: { fontSize: 13, fontWeight: '700', color: COLORS.text, marginBottom: 2 },
   deviceStatus: { fontSize: 9, fontWeight: '700', color: COLORS.textDim, letterSpacing: 1 },
   deviceStatusConnected: { color: COLORS.secondary },
+  deviceStatusDenied:    { color: COLORS.tertiary },
+
+  // Apple Health data card
+  healthCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 16, padding: 20,
+    marginBottom: 28,
+    borderWidth: 1, borderColor: 'rgba(209,255,38,0.12)',
+  },
+  healthCardHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: 20,
+  },
+  healthCardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  healthCardTitle: { fontSize: 11, fontWeight: '700', color: COLORS.primary, letterSpacing: 2 },
+  healthSyncTime: { fontSize: 9, color: COLORS.textDim, letterSpacing: 0.5 },
+  healthMetricsRow: {
+    flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center',
+  },
+  healthMetric: { flex: 1, alignItems: 'center', gap: 6 },
+  healthMetricDivider: {
+    width: 1, height: 48,
+    backgroundColor: COLORS.borderLight,
+  },
+  healthMetricValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },
+  healthMetricValue: { fontSize: 22, fontWeight: '700', color: COLORS.text },
+  healthMetricDim: { color: COLORS.textDim },
+  healthMetricUnit: { fontSize: 10, color: COLORS.textDim, fontWeight: '600' },
+  healthMetricLabel: { fontSize: 8, fontWeight: '700', color: COLORS.textVariant, letterSpacing: 1.5 },
 
   // Plan card
   planCard: {

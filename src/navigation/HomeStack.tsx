@@ -8,6 +8,7 @@ import ProfileScreen from '../screens/profile/ProfileScreen';
 import CargarFotosScreen from '../screens/photos/CargarFotosScreen';
 import PesoYMedidasScreen from '../screens/measurements/PesoYMedidasScreen';
 import HidratacionScreen from '../screens/hydration/HidratacionScreen';
+import RegistroCardioScreen from '../screens/cardio/RegistroCardioScreen';
 
 const Stack = createNativeStackNavigator<HomeStackParamList>();
 
@@ -50,6 +51,7 @@ export const HomeStack: React.FC = () => {
       >
         <Stack.Screen name="PesoYMedidas" component={PesoYMedidasScreen} />
         <Stack.Screen name="Hidratacion" component={HidratacionScreen} />
+        <Stack.Screen name="RegistroCardio" component={RegistroCardioScreen} />
       </Stack.Group>
     </Stack.Navigator>
   );

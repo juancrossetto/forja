@@ -53,7 +53,8 @@
       "WebFetch(domain:api.github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebSearch",
-      "Bash(grep -E '\\\\.\\(ts|tsx\\)$')"
+      "Bash(grep -E '\\\\.\\(ts|tsx\\)$')",
+      "Bash(grep -E \"\\\\.ts$\")"
     ]
   }
 }

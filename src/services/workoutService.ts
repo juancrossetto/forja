@@ -1,6 +1,13 @@
 import { supabase } from '../lib/supabase';
 import { syncTrainingGoal } from './goalProgressService';
 
+export type CardioActivityId =
+  | 'running'
+  | 'walking'
+  | 'cycling'
+  | 'rowing'
+  | 'elliptical';
+
 export interface WorkoutLog {
   id: string;
   user_id: string;
@@ -11,6 +18,10 @@ export interface WorkoutLog {
   rpe: number | null;
   comments: string | null;
   completed: boolean;
+  cardio_activity?: CardioActivityId | null;
+  distance?: number | null;
+  distance_unit?: 'km' | 'mi' | null;
+  duration_seconds?: number | null;
 }
 
 function todayISO(): string {
@@ -52,6 +63,59 @@ export async function saveWorkoutLog(payload: {
   // Sync goal progress (non-blocking)
   syncTrainingGoal(date).catch(() => {});
 
+  return true;
+}
+
+const CARDIO_ACTIVITY_TITLE: Record<CardioActivityId, string> = {
+  running: 'Running',
+  walking: 'Walking',
+  cycling: 'Cycling',
+  rowing: 'Rowing',
+  elliptical: 'Eliptical',
+};
+
+/**
+ * Guarda una sesión de cardio completada (distancia, duración, RPE).
+ * Persiste en workout_logs con workout_type = cardio y columnas dedicadas.
+ */
+export async function saveCardioLog(payload: {
+  activity: CardioActivityId;
+  unit: 'km' | 'mi';
+  /** Distancia en la unidad elegida; null si el usuario no ingresó valor */
+  distance: number | null;
+  durationSeconds: number;
+  rpe: number;
+  date?: string;
+}): Promise<boolean> {
+  const userId = await getUserId();
+  if (!userId) return false;
+
+  const date = payload.date ?? todayISO();
+  const title = CARDIO_ACTIVITY_TITLE[payload.activity];
+  const workout_name = `Cardio · ${title}`;
+  const duration_min =
+    payload.durationSeconds > 0 ? Math.max(0, Math.round(payload.durationSeconds / 60)) : 0;
+
+  const { error } = await supabase.from('workout_logs').insert({
+    user_id: userId,
+    date,
+    workout_name,
+    workout_type: 'cardio',
+    duration_min,
+    duration_seconds: payload.durationSeconds,
+    rpe: payload.rpe,
+    cardio_activity: payload.activity,
+    distance: payload.distance,
+    distance_unit: payload.distance != null ? payload.unit : null,
+    completed: true,
+  });
+
+  if (error) {
+    console.error('cardio save:', error.message);
+    return false;
+  }
+
+  syncTrainingGoal(date).catch(() => {});
   return true;
 }
 

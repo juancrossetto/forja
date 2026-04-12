@@ -13,6 +13,8 @@ import { AddMenuOverlay } from '../screens/home/AddMenuOverlay';
 import { ActiveWorkoutBanner } from '../components/ActiveWorkoutBanner';
 import { WorkoutLiveTimer } from '../components/WorkoutLiveTimer';
 import { useTrainingStore } from '../store/trainingStore';
+import { useAuthStore } from '../store/authStore';
+import { startHealthSync, stopHealthSync } from '../services/healthService';
 
 // Empty placeholder screen for the Add tab (the actual UI is a modal)
 const EmptyScreen = () => null;
@@ -23,10 +25,22 @@ export const MainTabs: React.FC = () => {
   const [addMenuVisible, setAddMenuVisible] = useState(false);
   const navigation = useNavigation<any>();
   const loadTrainingCatalog = useTrainingStore((s) => s.loadTrainingCatalog);
+  const setSteps        = useAuthStore((s) => s.setSteps);
+  const setWatchConnected = useAuthStore((s) => s.setWatchConnected);
 
   useEffect(() => {
     void loadTrainingCatalog();
   }, [loadTrainingCatalog]);
+
+  // Global health sync — single Pedometer subscription for the whole app lifetime
+  useEffect(() => {
+    startHealthSync((partial) => {
+      if (partial.steps != null) setSteps(partial.steps);
+    }).then((started) => {
+      if (started) setWatchConnected(true);
+    });
+    return () => stopHealthSync();
+  }, [setSteps, setWatchConnected]);
 
   const closeMenu = useCallback(() => setAddMenuVisible(false), []);
 
@@ -110,6 +124,7 @@ export const MainTabs: React.FC = () => {
           onSelectWater={() => navigateFromMenu('HomeStack', 'Hidratacion')}
           onSelectPhotos={() => navigateFromMenu('HomeStack', 'CargarFotos')}
           onSelectMeasurements={() => navigateFromMenu('HomeStack', 'PesoYMedidas')}
+          onSelectCardio={() => navigateFromMenu('HomeStack', 'RegistroCardio')}
         />
       </Modal>
     </>

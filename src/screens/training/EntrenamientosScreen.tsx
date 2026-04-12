@@ -12,7 +12,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTrainingStore } from '../../store/trainingStore';
 import type { TrainingPhase } from '../../types';
-import { getProfile } from '../../services/profileService';
 import { AppProgressiveHeader, HEADER_ROW_HEIGHT } from '../../components/AppProgressiveHeader';
 
 // Color palette
@@ -88,15 +87,9 @@ export const EntrenamientosScreen: React.FC<Props> = ({ navigation }) => {
   const isLoading = useTrainingStore((s) => s.isLoading);
   const insets = useSafeAreaInsets();
   const scrollY = useRef(new Animated.Value(0)).current;
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-
   useEffect(() => {
     loadTrainingCatalog();
   }, [loadTrainingCatalog]);
-
-  useEffect(() => {
-    getProfile().then((p) => { if (p?.avatar_url) setAvatarUrl(p.avatar_url); });
-  }, []);
 
   const scheduleDays = useMemo(() => {
     if (currentPhase?.days?.length) {
@@ -303,7 +296,6 @@ export const EntrenamientosScreen: React.FC<Props> = ({ navigation }) => {
         topInset={insets.top}
         onHomePress={() => (navigation as any).getParent()?.navigate('HomeStack', { screen: 'Inicio' })}
         onAvatarPress={() => (navigation as any).getParent()?.navigate('HomeStack', { screen: 'Perfil' })}
-        avatarUrl={avatarUrl}
       />
     </View>
   );

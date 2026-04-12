@@ -16,6 +16,15 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  /** Cached avatar URL from user_profiles — shared across all screens */
+  avatarUrl: string | null;
+  setAvatarUrl: (url: string | null) => void;
+  /** Whether Apple Watch / HealthKit permission is granted */
+  watchConnected: boolean;
+  setWatchConnected: (val: boolean) => void;
+  /** Live step count — updated by the global health sync in MainTabs */
+  steps: number | null;
+  setSteps: (steps: number | null) => void;
   login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   loginWithGoogle: (idToken: string) => Promise<void>;
   loginWithApple: (identityToken: string, email?: string | null, fullName?: string | null) => Promise<void>;
@@ -30,6 +39,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
   isLoading: false,
   error: null,
+  avatarUrl: null,
+  setAvatarUrl: (url) => set({ avatarUrl: url }),
+  watchConnected: false,
+  setWatchConnected: (val) => set({ watchConnected: val }),
+  steps: null,
+  setSteps: (steps) => set({ steps }),
 
   checkSession: async () => {
     try {
@@ -161,7 +176,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   logout: async () => {
     await supabase.auth.signOut();
     await SecureStore.deleteItemAsync(REMEMBER_ME_KEY);
-    set({ user: null, isAuthenticated: false, error: null });
+    set({ user: null, isAuthenticated: false, error: null, avatarUrl: null, watchConnected: false, steps: null });
   },
 
   clearError: () => set({ error: null }),

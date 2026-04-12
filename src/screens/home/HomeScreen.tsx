@@ -187,7 +187,8 @@ const GoalItem = React.memo(({ goal, onToggle }: { goal: DailyGoal; onToggle: (g
 // ────────────────────────────────────────────────────────────────────────────
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation<Nav>();
-  const user = useAuthStore((s) => s.user);
+  const user          = useAuthStore((s) => s.user);
+  const setAvatarUrl  = useAuthStore((s) => s.setAvatarUrl);
   const setActiveDate = useUIStore((s) => s.setActiveDate);
   const insets = useSafeAreaInsets();
 
@@ -200,7 +201,6 @@ const HomeScreen: React.FC = () => {
     return t;
   });
 
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [goals, setGoals] = useState<DailyGoal[]>([]);
   const [goalsLoading, setGoalsLoading] = useState(true);
@@ -238,10 +238,10 @@ const HomeScreen: React.FC = () => {
     setActiveDate(selectedDate.toISOString().split('T')[0]);
   }, [selectedDate, loadGoals, setActiveDate]);
 
-  // Load avatar from profile
+  // Load avatar into shared store (all headers across tabs share it)
   useEffect(() => {
     getProfile().then((p) => { if (p?.avatar_url) setAvatarUrl(p.avatar_url); });
-  }, []);
+  }, [setAvatarUrl]);
 
   // One-time init: push notifications + step tracking
   useEffect(() => {
@@ -626,8 +626,6 @@ const HomeScreen: React.FC = () => {
         topInset={insets.top}
         onHomePress={() => navigation.navigate('Inicio')}
         onAvatarPress={() => navigation.navigate('Perfil')}
-        avatarUrl={avatarUrl}
-        avatarInitial={(user?.name?.[0] ?? user?.email?.[0] ?? 'U').toUpperCase()}
       />
     </View>
   );

@@ -11,7 +11,7 @@ import {
 import Svg, { Path, Circle, Rect, Polygon } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useProgressStore } from '../../store/progressStore';
-import { getProfile } from '../../services/profileService';
+import { useAuthStore } from '../../store/authStore';
 import { AppProgressiveHeader, HEADER_ROW_HEIGHT } from '../../components/AppProgressiveHeader';
 
 const { width } = Dimensions.get('window');
@@ -38,20 +38,17 @@ interface Props {
 
 const ProgresoScreen: React.FC<Props> = ({ navigation }) => {
   const loadProgressData = useProgressStore((s) => s.loadProgressData);
-  const measurements = useProgressStore((s) => s.measurements);
-  const todayGoals = useProgressStore((s) => s.todayGoals);
-  const isStale = useProgressStore((s) => s.isStale);
-  const insets = useSafeAreaInsets();
-  const scrollY = useRef(new Animated.Value(0)).current;
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const measurements     = useProgressStore((s) => s.measurements);
+  const todayGoals       = useProgressStore((s) => s.todayGoals);
+  const isStale          = useProgressStore((s) => s.isStale);
+  const watchConnected   = useAuthStore((s) => s.watchConnected);
+  const steps            = useAuthStore((s) => s.steps);
+  const insets           = useSafeAreaInsets();
+  const scrollY          = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     void loadProgressData();
   }, [loadProgressData]);
-
-  useEffect(() => {
-    getProfile().then((p) => { if (p?.avatar_url) setAvatarUrl(p.avatar_url); });
-  }, []);
 
   const latestM = measurements[0] ?? null;
   const prevM = measurements[1] ?? null;
@@ -70,9 +67,18 @@ const ProgresoScreen: React.FC<Props> = ({ navigation }) => {
     return Math.min(100, Math.round((g.current_value / g.target_value) * 100));
   }
 
-  const workoutPct = goalPct('training');
+  const workoutPct   = goalPct('training');
   const nutritionPct = goalPct('meals');
   const hydrationPct = goalPct('hydration');
+
+  // Steps card
+  const stepsGoalEntry = todayGoals.find((g) => g.goal_type === 'steps');
+  const stepsTarget    = stepsGoalEntry?.target_value ?? 10000;
+  const stepsPct       = steps != null ? Math.min(100, Math.round((steps / stepsTarget) * 100)) : 0;
+  const stepsDisplay   = steps != null ? steps.toLocaleString('es-AR') : '—';
+  const stepsSource    = steps == null
+    ? null
+    : watchConnected ? 'APPLE WATCH' : 'IPHONE';
 
   // Sparkline – oldest to newest
   const sparklineEntries = useMemo(
@@ -190,14 +196,32 @@ const ProgresoScreen: React.FC<Props> = ({ navigation }) => {
 
         {/* ── Pasos + Descanso ────────────────────────────────────── */}
         <View style={[s.row, { marginHorizontal: CARD_PADDING, marginTop: 12, gap: 8 }]}>
+
+          {/* Pasos — datos reales de HealthKit */}
           <View style={[s.card, { flex: 1 }]}>
             <View style={s.row}>
               <IconSteps color={C.secondary} />
               <Text style={[s.cardLabel, { marginLeft: 6 }]}>PASOS</Text>
             </View>
-            <Text style={s.halfValue}>—</Text>
-            <Text style={s.halfMeta}>META: 10,000</Text>
+
+            <Text style={s.halfValue}>{stepsDisplay}</Text>
+
+            {/* Barra de progreso hacia la meta */}
+            <View style={s.stepsTrack}>
+              <View style={[s.stepsFill, { width: `${stepsPct}%` }]} />
+            </View>
+
+            <View style={[s.row, { justifyContent: 'space-between', marginTop: 6 }]}>
+              <Text style={s.halfMeta}>META: {stepsTarget.toLocaleString('es-AR')}</Text>
+              {stepsSource != null && (
+                <View style={s.sourceBadge}>
+                  <Text style={s.sourceText}>{stepsSource}</Text>
+                </View>
+              )}
+            </View>
           </View>
+
+          {/* Descanso */}
           <View style={[s.card, { flex: 1 }]}>
             <View style={s.row}>
               <IconMoon color={C.orange} />
@@ -286,7 +310,6 @@ const ProgresoScreen: React.FC<Props> = ({ navigation }) => {
         topInset={insets.top}
         onHomePress={() => (navigation as any).getParent()?.navigate('HomeStack', { screen: 'Inicio' })}
         onAvatarPress={() => (navigation as any).getParent()?.navigate('HomeStack', { screen: 'Perfil' })}
-        avatarUrl={avatarUrl}
       />
     </View>
   );
@@ -558,6 +581,40 @@ const s = StyleSheet.create({
     color: C.mutedLo,
     letterSpacing: 0.5,
     marginTop: 4,
+  },
+
+  // Steps progress
+  stepsTrack: {
+    height: 3,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginTop: 8,
+  },
+  stepsFill: {
+    height: '100%',
+    backgroundColor: C.secondary,
+    borderRadius: 2,
+  },
+
+  // Source badge
+  sourceBadge: {
+    backgroundColor: 'rgba(0,227,253,0.12)',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  sourceBadgeDim: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  sourceText: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: C.secondary,
+    letterSpacing: 0.8,
+  },
+  sourceTextDim: {
+    color: C.mutedLo,
   },
 
   // Calories card

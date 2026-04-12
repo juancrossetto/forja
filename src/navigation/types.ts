@@ -63,6 +63,7 @@ export type HomeStackParamList = {
   CargarFotos: undefined;
   PesoYMedidas: undefined;
   Hidratacion: { date?: string } | undefined;
+  RegistroCardio: undefined;
 };
 
 // Nutrition Stack Types
