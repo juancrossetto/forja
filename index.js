@@ -1,3 +1,7 @@
+// Debe ir primero: evita "Exception in HostFunction" / runtime de Reanimated no listo (iOS/Hermes).
+import 'react-native-gesture-handler';
+import 'react-native-reanimated';
+
 import { registerRootComponent } from 'expo';
 import App from './App';
 

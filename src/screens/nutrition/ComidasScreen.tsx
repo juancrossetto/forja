@@ -6,9 +6,19 @@ import {
   FlatList,
   Image,
   TouchableOpacity,
+  Pressable,
   Animated,
   ActivityIndicator,
+  LayoutAnimation,
+  Platform,
+  UIManager,
 } from 'react-native';
+import {
+  Swipeable,
+  GestureHandlerRootView,
+  TouchableOpacity as GHTouchableOpacity,
+} from 'react-native-gesture-handler';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -16,6 +26,8 @@ import { AppProgressiveHeader, HEADER_ROW_HEIGHT } from '../../components/AppPro
 import {
   getMealsForDate,
   getMealTypeLabel,
+  deleteMealLog,
+  restoreMealLog,
   type MealLog,
   type MealType,
 } from '../../services/mealService';
@@ -76,6 +88,15 @@ function sumLogs(logs: MealLog[]) {
   );
 }
 
+/** Texto de porción tipo referencia: "1 porción (50 g)" */
+function formatPortionLine(item: MealLog): string {
+  const g = item.portion_grams;
+  if (g != null && Number(g) > 0) {
+    return `1 porción (${Math.round(Number(g))} g)`;
+  }
+  return 'Porción registrada';
+}
+
 interface ShoppingItem {
   id: string;
   name: string;
@@ -105,14 +126,26 @@ const SHOPPING_ITEMS: ShoppingItem[] = [
 
 type ComidasScreenProps = {
   embedded?: boolean;
-  /** Desde Lista: abre Buscar en Alimentación en lugar de ir directo a Registrar comida */
+  /** Desde Plan: abre Buscar en Alimentación en lugar de ir directo a Registrar comida */
   onRequestAddForSlot?: (mealType: MealType) => void;
+  /** Tocar una fila del plan: abre detalle del registro */
+  onEmbeddedMealPress?: (log: MealLog) => void;
 };
 
-const ComidasScreen: React.FC<ComidasScreenProps> = ({ embedded = false, onRequestAddForSlot }) => {
+const UNDO_SNACK_MS = 5000;
+
+const ComidasScreen: React.FC<ComidasScreenProps> = ({
+  embedded = false,
+  onRequestAddForSlot,
+  onEmbeddedMealPress,
+}) => {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
   const scrollY = useRef(new Animated.Value(0)).current;
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const snackOpacity = useRef(new Animated.Value(0)).current;
+  const snackTranslate = useRef(new Animated.Value(16)).current;
   const activeDate = useUIStore((s) => s.activeDate);
   const setActiveDate = useUIStore((s) => s.setActiveDate);
   const targetCalories = useNutritionStore((s) => s.targetCalories);
@@ -121,6 +154,8 @@ const ComidasScreen: React.FC<ComidasScreenProps> = ({ embedded = false, onReque
 
   const [meals, setMeals] = useState<MealLog[]>([]);
   const [loadingMeals, setLoadingMeals] = useState(true);
+  /** Snapshot del último ítem borrado (para Deshacer). */
+  const [undoSnapshot, setUndoSnapshot] = useState<MealLog | null>(null);
 
   const consumedKcal = useMemo(
     () => meals.reduce((sum, m) => sum + (Number(m.energy_kcal) || 0), 0),
@@ -147,6 +182,58 @@ const ComidasScreen: React.FC<ComidasScreenProps> = ({ embedded = false, onReque
     useCallback(() => {
       void loadMeals();
     }, [loadMeals]),
+  );
+
+  useEffect(() => {
+    if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    },
+    [],
+  );
+
+  const clearUndoTimer = useCallback(() => {
+    if (undoTimerRef.current) {
+      clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = null;
+    }
+  }, []);
+
+  const runLayoutAnim = useCallback(() => {
+    if (Platform.OS === 'web') return;
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+  }, []);
+
+  useEffect(() => {
+    if (!undoSnapshot) return;
+    snackTranslate.setValue(16);
+    snackOpacity.setValue(0);
+    Animated.parallel([
+      Animated.timing(snackOpacity, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+      Animated.spring(snackTranslate, {
+        toValue: 0,
+        useNativeDriver: true,
+        friction: 8,
+        tension: 80,
+      }),
+    ]).start();
+  }, [undoSnapshot, snackOpacity, snackTranslate]);
+
+  const snackBottomOffset = useMemo(
+    () =>
+      embedded
+        ? tabBarHeight + Math.max(insets.bottom, 8) + 90
+        : tabBarHeight + Math.max(insets.bottom, 8) + 12,
+    [embedded, tabBarHeight, insets.bottom],
   );
 
   const macroTargets = useMemo(
@@ -219,32 +306,113 @@ const ComidasScreen: React.FC<ComidasScreenProps> = ({ embedded = false, onReque
     );
   };
 
-  const renderEmbeddedMealLine = (item: MealLog) => {
+  const handleUndoDelete = useCallback(async () => {
+    if (!undoSnapshot) return;
+    const snap = undoSnapshot;
+    clearUndoTimer();
+    setUndoSnapshot(null);
+    const restored = await restoreMealLog(snap);
+    if (restored) {
+      runLayoutAnim();
+      setMeals((prev) => {
+        const next = [...prev, restored];
+        next.sort(
+          (a, b) =>
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+        );
+        return next;
+      });
+    }
+  }, [undoSnapshot, clearUndoTimer, runLayoutAnim]);
+
+  const handleDeleteMeal = useCallback(
+    async (item: MealLog) => {
+      const snapshot: MealLog = { ...item };
+      runLayoutAnim();
+      setMeals((prev) => prev.filter((m) => m.id !== item.id));
+      const ok = await deleteMealLog(item.id, item.date);
+      if (!ok) {
+        runLayoutAnim();
+        setMeals((prev) => {
+          const next = [...prev, snapshot];
+          next.sort(
+            (a, b) =>
+              new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+          );
+          return next;
+        });
+        return;
+      }
+      clearUndoTimer();
+      setUndoSnapshot(snapshot);
+      undoTimerRef.current = setTimeout(() => {
+        setUndoSnapshot(null);
+        undoTimerRef.current = null;
+      }, UNDO_SNACK_MS);
+    },
+    [runLayoutAnim, clearUndoTimer],
+  );
+
+  const renderEmbeddedMealLine = (item: MealLog, index: number, total: number) => {
     const title =
       (item.product_display_name?.trim()) ||
       (item.title && item.title.trim()) ||
       getMealTypeLabel(item.meal_type);
     const uri = item.photo_url?.trim() ? item.photo_url : null;
     const k = item.energy_kcal != null && item.energy_kcal > 0 ? Math.round(item.energy_kcal) : null;
+    const isLast = index === total - 1;
     return (
-      <View key={item.id} style={styles.embeddedLine}>
-        {uri ? (
-          <Image source={{ uri }} style={styles.embeddedThumb} />
-        ) : (
-          <View style={styles.embeddedThumbPlaceholder}>
-            <MaterialCommunityIcons name="silverware-fork-knife" size={16} color={COLORS.textVariant} />
+      <Swipeable
+        key={item.id}
+        friction={2}
+        overshootRight={false}
+        renderRightActions={() => (
+          <View style={styles.swipeDeleteActionsWrap}>
+            <GHTouchableOpacity
+              style={styles.swipeDeleteReveal}
+              onPress={() => handleDeleteMeal(item)}
+              activeOpacity={0.9}
+            >
+              <MaterialCommunityIcons name="close" size={10} color="#FFFFFF" />
+            </GHTouchableOpacity>
           </View>
         )}
-        <View style={styles.embeddedLineBody}>
-          <Text style={styles.embeddedLineTitle} numberOfLines={1}>
-            {title}
-          </Text>
-          <Text style={styles.embeddedLineMeta}>
-            {formatMealTime(item.created_at)}
-            {k != null ? ` · ${k} kcal` : ''}
-          </Text>
-        </View>
-      </View>
+      >
+        <Pressable
+          onPress={() => onEmbeddedMealPress?.(item)}
+          style={({ pressed }) => [
+            styles.embeddedRowFront,
+            pressed && styles.embeddedRowPressed,
+            !isLast && styles.embeddedRowDivider,
+          ]}
+        >
+          {uri ? (
+            <Image source={{ uri }} style={styles.embeddedThumb} />
+          ) : (
+            <View style={styles.embeddedThumbPlaceholder}>
+              <MaterialCommunityIcons name="silverware-fork-knife" size={16} color={COLORS.textVariant} />
+            </View>
+          )}
+          <View style={styles.embeddedLineBody}>
+            <Text style={styles.embeddedLineTitle} numberOfLines={2}>
+              {title}
+            </Text>
+          </View>
+          <View style={styles.embeddedRightCol}>
+            <Text style={styles.embeddedLinePortion} numberOfLines={2}>
+              {formatPortionLine(item)}
+            </Text>
+            {k != null ? (
+              <Text style={styles.embeddedKcal}>{k} kcal</Text>
+            ) : (
+              <Text style={styles.embeddedKcalMuted}>—</Text>
+            )}
+          </View>
+          <View style={styles.embeddedCheckWrap}>
+            <MaterialCommunityIcons name="check" size={10} color="#FFFFFF" />
+          </View>
+        </Pressable>
+      </Swipeable>
     );
   };
 
@@ -287,6 +455,7 @@ const ComidasScreen: React.FC<ComidasScreenProps> = ({ embedded = false, onReque
   );
 
   return (
+    <GestureHandlerRootView style={styles.gestureRoot}>
     <View style={styles.container}>
       <Animated.ScrollView
         showsVerticalScrollIndicator={false}
@@ -396,18 +565,21 @@ const ComidasScreen: React.FC<ComidasScreenProps> = ({ embedded = false, onReque
                     const t = sumLogs(logs);
                     const label = getMealTypeLabel(slot);
                     return (
-                      <View key={slot} style={styles.slotCard}>
-                        <View style={styles.slotHeader}>
-                          <Text style={styles.slotTitle}>{label}</Text>
-                          <Text style={styles.slotMeta}>
-                            {Math.round(t.kcal)} kcal · {Math.round(t.p)}P | {Math.round(t.c)}C |{' '}
-                            {Math.round(t.f)}G
+                      <View key={slot} style={styles.slotCardEmbedded}>
+                        <Text style={styles.slotTitleEmbedded}>{label}</Text>
+                        <View style={styles.slotStatsRow}>
+                          <MaterialCommunityIcons name="fire" size={15} color="#F97316" />
+                          <Text style={styles.slotStatsText}>
+                            {Math.round(t.kcal)} kcal · {Math.round(t.p)} P | {Math.round(t.c)} C |{' '}
+                            {Math.round(t.f)} G
                           </Text>
                         </View>
                         {logs.length > 0 ? (
-                          <View style={styles.slotLines}>{logs.map((m) => renderEmbeddedMealLine(m))}</View>
+                          <View style={styles.slotLines}>
+                            {logs.map((m, idx) => renderEmbeddedMealLine(m, idx, logs.length))}
+                          </View>
                         ) : (
-                          <Text style={styles.slotEmpty}>Sin registros en este momento.</Text>
+                          <Text style={styles.slotEmptyEmbedded}>Sin registros en este momento.</Text>
                         )}
                         <TouchableOpacity
                           style={styles.slotAdd}
@@ -525,10 +697,73 @@ const ComidasScreen: React.FC<ComidasScreenProps> = ({ embedded = false, onReque
         />
       ) : null}
     </View>
+
+      {undoSnapshot ? (
+        <View
+          pointerEvents="box-none"
+          style={[styles.undoSnackbarOverlay, { bottom: snackBottomOffset }]}
+        >
+          <Animated.View
+            style={[
+              styles.undoSnackbar,
+              {
+                opacity: snackOpacity,
+                transform: [{ translateY: snackTranslate }],
+              },
+            ]}
+          >
+            <Text style={styles.undoSnackbarText}>Ítem eliminado</Text>
+            <TouchableOpacity
+              onPress={() => void handleUndoDelete()}
+              activeOpacity={0.85}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <Text style={styles.undoSnackbarAction}>Deshacer</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
+      ) : null}
+    </GestureHandlerRootView>
   );
 };
 
 const styles = StyleSheet.create({
+  gestureRoot: {
+    flex: 1,
+  },
+  undoSnackbarOverlay: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+  },
+  undoSnackbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: `${COLORS.text}14`,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  undoSnackbarText: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
+  undoSnackbarAction: {
+    color: themeColors.primary.default,
+    fontSize: 14,
+    fontWeight: '800',
+    marginLeft: 12,
+  },
   container: {
     flex: 1,
     backgroundColor: COLORS.bg,
@@ -903,69 +1138,82 @@ const styles = StyleSheet.create({
   embeddedSlots: {
     marginTop: 12,
     paddingHorizontal: 14,
-    gap: 10,
+    gap: 14,
     paddingBottom: 8,
   },
-  slotCard: {
-    borderRadius: 14,
+  slotCardEmbedded: {
+    borderRadius: 16,
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: `${COLORS.text}0D`,
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 8,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 10,
   },
-  slotHeader: {
-    marginBottom: 6,
-  },
-  slotTitle: {
-    fontSize: 14,
+  slotTitleEmbedded: {
+    fontSize: 16,
     fontWeight: '800',
     color: COLORS.text,
-    letterSpacing: -0.3,
+    letterSpacing: -0.35,
+    marginBottom: 6,
   },
-  slotMeta: {
-    marginTop: 2,
-    fontSize: 11,
+  slotStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  slotStatsText: {
+    fontSize: 12,
     fontWeight: '600',
     color: COLORS.textVariant,
+    flex: 1,
+    flexWrap: 'wrap',
   },
   slotLines: {
-    gap: 8,
     marginBottom: 4,
   },
-  slotEmpty: {
+  slotEmptyEmbedded: {
     fontSize: 11,
     color: `${COLORS.text}66`,
     fontStyle: 'italic',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   slotAdd: {
     alignSelf: 'stretch',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 10,
-    marginHorizontal: -4,
+    marginTop: 2,
     borderRadius: 10,
     backgroundColor: `${COLORS.text}06`,
     borderWidth: 1,
     borderColor: `${COLORS.text}14`,
   },
-  embeddedLine: {
+  embeddedRowFront: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
+    paddingVertical: 10,
+    backgroundColor: 'transparent',
+  },
+  embeddedRowPressed: {
+    opacity: 0.88,
+  },
+  embeddedRowDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: `${COLORS.text}12`,
   },
   embeddedThumb: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 10,
     backgroundColor: COLORS.surfaceHigh,
   },
   embeddedThumbPlaceholder: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 10,
     backgroundColor: COLORS.surfaceHigh,
     alignItems: 'center',
     justifyContent: 'center',
@@ -975,15 +1223,67 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   embeddedLineTitle: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '600',
     color: COLORS.text,
+    lineHeight: 20,
   },
-  embeddedLineMeta: {
-    fontSize: 10,
+  embeddedLinePortion: {
+    fontSize: 11,
     fontWeight: '500',
     color: COLORS.textVariant,
-    marginTop: 2,
+    textAlign: 'right',
+  },
+  embeddedRightCol: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    maxWidth: 120,
+    gap: 2,
+  },
+  embeddedKcal: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textVariant,
+  },
+  embeddedKcalMuted: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: `${COLORS.text}40`,
+  },
+  swipeDeleteActionsWrap: {
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+    paddingLeft: 6,
+  },
+  swipeDeleteReveal: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FF1744',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.28)',
+    shadowColor: '#FF1744',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  embeddedCheckWrap: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: themeColors.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.22)',
+    shadowColor: themeColors.success,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.45,
+    shadowRadius: 3,
+    elevation: 2,
   },
 });
 

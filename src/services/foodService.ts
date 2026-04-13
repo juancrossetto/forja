@@ -139,6 +139,21 @@ export async function createFood(payload: {
   return data as FoodRow;
 }
 
+export async function deleteFood(id: string): Promise<boolean> {
+  const userId = await getUserId();
+  if (!userId) return false;
+  const { error } = await supabase
+    .from('foods')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', userId);
+  if (error) {
+    console.error('delete food:', error.message);
+    return false;
+  }
+  return true;
+}
+
 /** Portion totals from per-100g values. */
 export function macrosForGrams(
   kcal100: number | null | undefined,

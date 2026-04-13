@@ -68,7 +68,7 @@ export type HomeStackParamList = {
 };
 
 // Nutrition Stack Types
-export type AlimentacionSubTab = 'recetas' | 'lista' | 'buscar' | 'escaner' | 'voz';
+export type AlimentacionSubTab = 'lista' | 'buscar' | 'escaner' | 'voz';
 
 export type NutritionStackParamList = {
   Alimentacion:

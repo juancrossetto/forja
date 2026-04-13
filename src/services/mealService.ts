@@ -169,6 +169,40 @@ export async function quickAddMealFromFood(
   });
 }
 
+/** Registro desde catálogo con gramos explícitos (hoja de detalle). */
+export async function addMealFromFoodWithPortion(
+  food: FoodRow,
+  mealType: MealType,
+  dateISO: string,
+  grams: number,
+): Promise<boolean> {
+  const g = Math.max(1, Math.round(grams));
+  const m = macrosForGrams(
+    food.kcal_100g,
+    food.protein_g_100g,
+    food.carbs_g_100g,
+    food.fat_g_100g,
+    g,
+  );
+  const macro_source: MealMacroSource =
+    food.source === 'openfoodfacts' ? 'openfoodfacts' : 'catalog';
+  const brandPrefix = food.brand ? `${food.brand} · ` : '';
+  return saveMealLog({
+    date: dateISO,
+    meal_type: mealType,
+    title: food.name,
+    food_id: food.id,
+    product_display_name: `${brandPrefix}${food.name}`.trim(),
+    openfoodfacts_code: food.openfoodfacts_code ?? food.barcode ?? undefined,
+    macro_source,
+    portion_grams: g,
+    energy_kcal: m.energy_kcal,
+    protein_g: m.protein_g,
+    carbs_g: m.carbs_g,
+    fat_g: m.fat_g,
+  });
+}
+
 /** Foto sin macros (diario visual). */
 export async function quickAddPhotoMealJournal(
   mealType: MealType,
@@ -255,4 +289,55 @@ export async function getRecentMeals(days = 7): Promise<MealLog[]> {
 
   if (error) { console.error('recent meals fetch:', error.message); return []; }
   return data ?? [];
+}
+
+/** `date` del día afectado: sincroniza meta de “comidas” si se pasa. */
+export async function deleteMealLog(id: string, dateForGoalSync?: string): Promise<boolean> {
+  const userId = await getUserId();
+  if (!userId) return false;
+  const { error } = await supabase
+    .from('meal_logs')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', userId);
+  if (error) { console.error('delete meal log:', error.message); return false; }
+  if (dateForGoalSync) syncMealsGoal(dateForGoalSync).catch(() => {});
+  return true;
+}
+
+/**
+ * Reinserta una fila equivalente a un log borrado (nuevo id). Para flujo Deshacer.
+ */
+export async function restoreMealLog(snapshot: MealLog): Promise<MealLog | null> {
+  const userId = await getUserId();
+  if (!userId) return null;
+
+  const row: Record<string, unknown> = {
+    user_id: userId,
+    date: snapshot.date,
+    meal_type: snapshot.meal_type,
+    title: snapshot.title ?? null,
+    photo_url: snapshot.photo_url ?? null,
+    food_id: snapshot.food_id ?? null,
+    openfoodfacts_code: snapshot.openfoodfacts_code ?? null,
+    product_display_name: snapshot.product_display_name ?? null,
+    macro_source: snapshot.macro_source ?? null,
+    user_food_id: snapshot.user_food_id ?? null,
+    portion_grams: snapshot.portion_grams ?? null,
+    energy_kcal: snapshot.energy_kcal ?? null,
+    protein_g: snapshot.protein_g ?? null,
+    carbs_g: snapshot.carbs_g ?? null,
+    fat_g: snapshot.fat_g ?? null,
+  };
+
+  const { data, error } = await supabase.from('meal_logs').insert(row).select('*').single();
+
+  if (error) {
+    console.error('restore meal log:', error.message);
+    return null;
+  }
+
+  syncMealsGoal(snapshot.date).catch(() => {});
+
+  return data as MealLog;
 }

@@ -8,14 +8,25 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  Easing,
+  cancelAnimation,
+} from 'react-native-reanimated';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
-import { resolveOrCreateFoodFromBarcode } from '../../services/foodService';
+import {
+  resolveOrCreateFoodFromBarcode,
+  findFoodByBarcode,
+  type FoodRow,
+} from '../../services/foodService';
 import {
   getMealTypeLabel,
-  quickAddMealFromFood,
   quickAddPhotoMealJournal,
   type MealType,
 } from '../../services/mealService';
@@ -39,19 +50,48 @@ type Props = {
   pendingMealType: MealType | null;
   activeDate: string;
   onMealSaved?: () => void;
+  /** Si es true, solo agrega a la base de alimentos; nunca crea registro de comida diaria */
+  catalogOnly?: boolean;
+  /** Modo diario: al resolver el código se abre la hoja de detalle */
+  onFoodForDetail?: (food: FoodRow) => void;
 };
 
-export function AlimentacionEscanerPanel({ pendingMealType, activeDate, onMealSaved }: Props) {
+export function AlimentacionEscanerPanel({
+  pendingMealType,
+  activeDate,
+  onMealSaved,
+  catalogOnly = false,
+  onFoodForDetail,
+}: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
-  const [mode, setMode] = useState<ScanMode>('foto');
+  const [mode, setMode] = useState<ScanMode>('codigo');
   const [flash, setFlash] = useState<'off' | 'on'>('off');
   const [capturing, setCapturing] = useState(false);
   const barcodeLock = useRef(false);
+  const scanY = useSharedValue(0);
+  const frameHeight = useSharedValue(200);
 
   useEffect(() => {
     barcodeLock.current = false;
   }, [mode]);
+
+  useEffect(() => {
+    if (mode === 'codigo') {
+      scanY.value = 0;
+      scanY.value = withRepeat(
+        withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.quad) }),
+        -1,
+        true,
+      );
+    } else {
+      cancelAnimation(scanY);
+    }
+  }, [mode, scanY]);
+
+  const scanLineStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: scanY.value * (frameHeight.value - 2) }],
+  }));
 
   const mealTypeForLog = pendingMealType ?? 'DES';
 
@@ -86,26 +126,66 @@ export function AlimentacionEscanerPanel({ pendingMealType, activeDate, onMealSa
       if (!data) return;
       barcodeLock.current = true;
       void (async () => {
-        const food = await resolveOrCreateFoodFromBarcode(data);
-        if (!food) {
-          Alert.alert(
-            'No encontrado',
-            'No hay producto en tu lista ni en Open Food Facts para este código. Probá otro código o cargá desde Buscar.',
-          );
+        let releaseOnDismiss = false;
+        try {
+          const existing = await findFoodByBarcode(data);
+
+          if (catalogOnly) {
+            // ── Modo catálogo: solo gestiona la base de alimentos ──
+            if (existing) {
+              releaseOnDismiss = true;
+              Alert.alert(
+                'Ya en tu catálogo',
+                `"${existing.name}" ya existe en tu base de alimentos.`,
+                [{ text: 'OK', onPress: () => { barcodeLock.current = false; } }],
+              );
+              return;
+            }
+            const food = await resolveOrCreateFoodFromBarcode(data);
+            if (!food) {
+              releaseOnDismiss = true;
+              Alert.alert(
+                'No encontrado',
+                'No hay producto en Open Food Facts para este código. Probá otro o cargá manualmente.',
+                [{ text: 'OK', onPress: () => { barcodeLock.current = false; } }],
+              );
+              return;
+            }
+            releaseOnDismiss = true;
+            Alert.alert('Guardado en catálogo', `"${food.name}" fue agregado a tu base de alimentos.`, [
+              { text: 'OK', onPress: () => { barcodeLock.current = false; onMealSaved?.(); } },
+            ]);
+            return;
+          }
+
+          // ── Modo registro diario: hoja de detalle ──
+          if (existing) {
+            onFoodForDetail?.(existing);
+            barcodeLock.current = false;
+            return;
+          }
+          const food = await resolveOrCreateFoodFromBarcode(data);
+          if (!food) {
+            releaseOnDismiss = true;
+            Alert.alert(
+              'No encontrado',
+              'No hay producto en Open Food Facts para este código. Probá otro o cargá desde Buscar.',
+              [{ text: 'OK', onPress: () => { barcodeLock.current = false; } }],
+            );
+            return;
+          }
+          onFoodForDetail?.(food);
           barcodeLock.current = false;
           return;
+        } catch (e) {
+          console.warn('onBarcode error:', e);
+          Alert.alert('Error', 'Ocurrió un error al procesar el código. Reintentá.');
+        } finally {
+          if (!releaseOnDismiss) barcodeLock.current = false;
         }
-        const ok = await quickAddMealFromFood(food, mealTypeForLog, activeDate);
-        if (ok) {
-          Alert.alert('Listo', `${food.name} agregado a ${getMealTypeLabel(mealTypeForLog)}.`);
-          onMealSaved?.();
-        } else {
-          Alert.alert('Error', 'No se pudo guardar el registro.');
-        }
-        barcodeLock.current = false;
       })();
     },
-    [mode, mealTypeForLog, activeDate, onMealSaved],
+    [mode, mealTypeForLog, activeDate, onMealSaved, catalogOnly, onFoodForDetail],
   );
 
   const takePhoto = async () => {
@@ -180,18 +260,6 @@ export function AlimentacionEscanerPanel({ pendingMealType, activeDate, onMealSa
 
       <View style={styles.modeRow}>
         <TouchableOpacity
-          style={[styles.modeChip, mode === 'foto' && styles.modeChipOn]}
-          onPress={() => setMode('foto')}
-          activeOpacity={0.85}
-        >
-          <MaterialCommunityIcons
-            name="camera-outline"
-            size={18}
-            color={mode === 'foto' ? C.lime : C.muted}
-          />
-          <Text style={[styles.modeLabel, mode === 'foto' && styles.modeLabelOn]}>Plato</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
           style={[styles.modeChip, mode === 'codigo' && styles.modeChipOn]}
           onPress={() => setMode('codigo')}
           activeOpacity={0.85}
@@ -203,6 +271,18 @@ export function AlimentacionEscanerPanel({ pendingMealType, activeDate, onMealSa
           />
           <Text style={[styles.modeLabel, mode === 'codigo' && styles.modeLabelOn]}>Código</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.modeChip, mode === 'foto' && styles.modeChipOn]}
+          onPress={() => setMode('foto')}
+          activeOpacity={0.85}
+        >
+          <MaterialCommunityIcons
+            name="camera-outline"
+            size={18}
+            color={mode === 'foto' ? C.lime : C.muted}
+          />
+          <Text style={[styles.modeLabel, mode === 'foto' && styles.modeLabelOn]}>Plato</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.frameOuter}>
@@ -212,13 +292,14 @@ export function AlimentacionEscanerPanel({ pendingMealType, activeDate, onMealSa
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFillObject}
         />
-        <View style={styles.frameInner}>
+        <View style={styles.frameInner} onLayout={(e) => { frameHeight.value = e.nativeEvent.layout.height; }}>
           <CameraView
             ref={cameraRef}
             style={StyleSheet.absoluteFillObject}
             facing="back"
             flash={flash}
             mode="picture"
+            autofocus="on"
             barcodeScannerSettings={
               mode === 'codigo'
                 ? { barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e'] }
@@ -226,6 +307,16 @@ export function AlimentacionEscanerPanel({ pendingMealType, activeDate, onMealSa
             }
             onBarcodeScanned={mode === 'codigo' ? onBarcode : undefined}
           />
+          {mode === 'codigo' && (
+            <Animated.View style={[styles.scanLine, scanLineStyle]} pointerEvents="none">
+              <LinearGradient
+                colors={['transparent', C.lime, 'transparent']}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={StyleSheet.absoluteFillObject}
+              />
+            </Animated.View>
+          )}
         </View>
       </View>
 
@@ -344,6 +435,17 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     overflow: 'hidden',
     backgroundColor: '#000',
+  },
+  scanLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 2,
+    zIndex: 10,
+    shadowColor: C.lime,
+    shadowOpacity: 0.9,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
   },
   controls: {
     flexDirection: 'row',

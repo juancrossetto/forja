@@ -1,4 +1,3 @@
-import 'react-native-gesture-handler';
 import React from 'react';
 import { StatusBar, View, ActivityIndicator, LogBox } from 'react-native';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
