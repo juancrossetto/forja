@@ -7,6 +7,7 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -21,8 +22,9 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-  resolveOrCreateFoodFromBarcode,
+  resolveOrCreateFoodFromBarcodeWithImage,
   findFoodByBarcode,
+  sharedImageUrl,
   type FoodRow,
 } from '../../services/foodService';
 import {
@@ -30,6 +32,7 @@ import {
   quickAddPhotoMealJournal,
   type MealType,
 } from '../../services/mealService';
+import { FoodImageCatalogPicker } from '../../components/nutrition/FoodImageCatalogPicker';
 import { colors } from '../../theme/colors';
 
 const C = {
@@ -68,6 +71,8 @@ export function AlimentacionEscanerPanel({
   const [mode, setMode] = useState<ScanMode>('codigo');
   const [flash, setFlash] = useState<'off' | 'on'>('off');
   const [capturing, setCapturing] = useState(false);
+  const [catalogImageKey, setCatalogImageKey] = useState<string | null>(null);
+  const [catalogPickerOpen, setCatalogPickerOpen] = useState(false);
   const barcodeLock = useRef(false);
   const scanY = useSharedValue(0);
   const frameHeight = useSharedValue(200);
@@ -133,15 +138,16 @@ export function AlimentacionEscanerPanel({
           if (catalogOnly) {
             // ── Modo catálogo: solo gestiona la base de alimentos ──
             if (existing) {
-              releaseOnDismiss = true;
-              Alert.alert(
-                'Ya en tu catálogo',
-                `"${existing.name}" ya existe en tu base de alimentos.`,
-                [{ text: 'OK', onPress: () => { barcodeLock.current = false; } }],
-              );
+              barcodeLock.current = false;
+              onFoodForDetail?.(existing);
               return;
             }
-            const food = await resolveOrCreateFoodFromBarcode(data);
+            if (!catalogImageKey) {
+              barcodeLock.current = false;
+              setCatalogPickerOpen(true);
+              return;
+            }
+            const food = await resolveOrCreateFoodFromBarcodeWithImage(data, catalogImageKey);
             if (!food) {
               releaseOnDismiss = true;
               Alert.alert(
@@ -151,10 +157,8 @@ export function AlimentacionEscanerPanel({
               );
               return;
             }
-            releaseOnDismiss = true;
-            Alert.alert('Guardado en catálogo', `"${food.name}" fue agregado a tu base de alimentos.`, [
-              { text: 'OK', onPress: () => { barcodeLock.current = false; onMealSaved?.(); } },
-            ]);
+            barcodeLock.current = false;
+            onFoodForDetail?.(food);
             return;
           }
 
@@ -164,7 +168,12 @@ export function AlimentacionEscanerPanel({
             barcodeLock.current = false;
             return;
           }
-          const food = await resolveOrCreateFoodFromBarcode(data);
+          if (!catalogImageKey) {
+            barcodeLock.current = false;
+            setCatalogPickerOpen(true);
+            return;
+          }
+          const food = await resolveOrCreateFoodFromBarcodeWithImage(data, catalogImageKey);
           if (!food) {
             releaseOnDismiss = true;
             Alert.alert(
@@ -185,7 +194,7 @@ export function AlimentacionEscanerPanel({
         }
       })();
     },
-    [mode, mealTypeForLog, activeDate, onMealSaved, catalogOnly, onFoodForDetail],
+    [mode, mealTypeForLog, activeDate, onMealSaved, catalogOnly, onFoodForDetail, catalogImageKey],
   );
 
   const takePhoto = async () => {
@@ -257,6 +266,27 @@ export function AlimentacionEscanerPanel({
           </TouchableOpacity>
         </View>
       </View>
+      {mode === 'codigo' ? (
+        <TouchableOpacity
+          style={styles.catalogImageBtn}
+          onPress={() => setCatalogPickerOpen(true)}
+          activeOpacity={0.85}
+        >
+          {catalogImageKey ? (
+            <>
+              <View style={styles.catalogImagePreviewWrap}>
+                <Image source={{ uri: sharedImageUrl(catalogImageKey) }} style={styles.catalogImagePreview} />
+              </View>
+              <Text style={styles.catalogImageBtnText}>Imagen elegida (tocar para cambiar)</Text>
+            </>
+          ) : (
+            <>
+              <MaterialCommunityIcons name="image-plus" size={18} color={C.lime} />
+              <Text style={styles.catalogImageBtnText}>Elegir imagen del catálogo *</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      ) : null}
 
       <View style={styles.modeRow}>
         <TouchableOpacity
@@ -364,6 +394,12 @@ export function AlimentacionEscanerPanel({
           ? 'Tip: buena luz lateral = mejor detección de porción después.'
           : 'El código se lee automáticamente al enfocarlo.'}
       </Text>
+      <FoodImageCatalogPicker
+        visible={catalogPickerOpen}
+        onClose={() => setCatalogPickerOpen(false)}
+        onSelect={(key) => setCatalogImageKey(key || null)}
+        currentKey={catalogImageKey}
+      />
     </View>
   );
 }
@@ -492,6 +528,34 @@ const styles = StyleSheet.create({
     marginTop: 10,
     lineHeight: 15,
     paddingHorizontal: 8,
+  },
+  catalogImageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  catalogImageBtnText: {
+    color: C.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  catalogImagePreviewWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  catalogImagePreview: {
+    width: '100%',
+    height: '100%',
   },
   permBox: { flex: 1, justifyContent: 'center', padding: 24 },
   permText: { color: colors.text.secondary, textAlign: 'center', marginBottom: 16, lineHeight: 20 },

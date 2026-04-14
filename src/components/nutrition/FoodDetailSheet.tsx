@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,12 +12,20 @@ import {
   Platform,
   Image,
   Alert,
+  Animated,
+  PanResponder,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
-import { macrosForGrams, type FoodRow } from '../../services/foodService';
+import {
+  macrosForGrams,
+  setFoodFavorite,
+  deleteFood,
+  resolveImageUrl,
+  type FoodRow,
+} from '../../services/foodService';
 import {
   getMealTypeLabel,
   addMealFromFoodWithPortion,
@@ -43,6 +51,10 @@ type Props = {
   payload: FoodDetailPayload | null;
   /** Tras agregar desde catálogo */
   onAdded?: () => void;
+  /** Tras cambiar favorito (para refrescar listado / payload) */
+  onFoodFavoriteChange?: (food: FoodRow) => void;
+  /** Tras eliminar alimento desde detalle */
+  onFoodDeleted?: (foodId: string) => void;
 };
 
 function fmtG(v: number | null | undefined): string {
@@ -60,22 +72,60 @@ function macroKcalParts(p?: number | null, c?: number | null, f?: number | null)
   const kf = F * 9;
   const t = kp + kc + kf;
   if (t <= 0) return { pPct: 33, cPct: 34, fPct: 33, kp, kc, kf };
-  return {
-    pPct: (kp / t) * 100,
-    cPct: (kc / t) * 100,
-    fPct: (kf / t) * 100,
-    kp,
-    kc,
-    kf,
-  };
+  return { pPct: (kp / t) * 100, cPct: (kc / t) * 100, fPct: (kf / t) * 100, kp, kc, kf };
 }
 
-export function FoodDetailSheet({ visible, onClose, payload, onAdded }: Props) {
+/** Dark design system — coherente con el resto de la app */
+const D = {
+  bg:         '#111111',
+  surface:    '#1a1a1a',
+  surfaceHi:  '#222222',
+  text:       '#FFFFFF',
+  textMuted:  'rgba(255,255,255,0.62)',
+  textSoft:   'rgba(255,255,255,0.36)',
+  border:     'rgba(255,255,255,0.08)',
+  borderMed:  'rgba(255,255,255,0.12)',
+} as const;
+
+export function FoodDetailSheet({ visible, onClose, payload, onAdded, onFoodFavoriteChange, onFoodDeleted }: Props) {
   const insets = useSafeAreaInsets();
   const [gramsStr, setGramsStr] = useState('100');
   const [mealType, setMealType] = useState<MealType>('DES');
   const [infoOpen, setInfoOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [favorite, setFavorite] = useState(false);
+
+  /** Swipe-to-close */
+  const translateY = useRef(new Animated.Value(0)).current;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) =>
+        g.dy > 6 && Math.abs(g.dy) > Math.abs(g.dx) * 1.5,
+      onPanResponderMove: (_, g) => {
+        if (g.dy > 0) translateY.setValue(g.dy);
+      },
+      onPanResponderRelease: (_, g) => {
+        if (g.dy > 90 || g.vy > 1.4) {
+          Animated.timing(translateY, {
+            toValue: 600,
+            duration: 220,
+            useNativeDriver: true,
+          }).start(() => {
+            translateY.setValue(0);
+            onClose();
+          });
+        } else {
+          Animated.spring(translateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            damping: 20,
+            stiffness: 300,
+          }).start();
+        }
+      },
+    }),
+  ).current;
 
   const isFood = payload?.kind === 'food';
   const food = isFood ? payload.food : null;
@@ -93,28 +143,24 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded }: Props) {
       setMealType(payload.mealType);
     }
     setInfoOpen(false);
+    if (payload?.kind === 'food') {
+      setFavorite(!!payload.food.is_favorite);
+    } else {
+      setFavorite(false);
+    }
+    translateY.setValue(0);
   }, [visible, payload]);
 
   const totalsFood = useMemo(() => {
     if (!food) return null;
     const parsed = parseFloat(gramsStr.replace(',', '.'));
     const g = Math.max(1, Math.round(Number.isFinite(parsed) ? parsed : 100));
-    return macrosForGrams(
-      food.kcal_100g,
-      food.protein_g_100g,
-      food.carbs_g_100g,
-      food.fat_g_100g,
-      g,
-    );
+    return macrosForGrams(food.kcal_100g, food.protein_g_100g, food.carbs_g_100g, food.fat_g_100g, g);
   }, [food, gramsStr]);
 
   const barFood = useMemo(() => {
     if (!totalsFood) return null;
-    return macroKcalParts(
-      totalsFood.protein_g,
-      totalsFood.carbs_g,
-      totalsFood.fat_g,
-    );
+    return macroKcalParts(totalsFood.protein_g, totalsFood.carbs_g, totalsFood.fat_g);
   }, [totalsFood]);
 
   const barLog = useMemo(() => {
@@ -124,13 +170,7 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded }: Props) {
 
   const title = useMemo(() => {
     if (food) return food.name.trim();
-    if (log) {
-      return (
-        (log.product_display_name?.trim()) ||
-        (log.title?.trim()) ||
-        'Registro'
-      );
-    }
+    if (log) return log.product_display_name?.trim() || log.title?.trim() || 'Registro';
     return '';
   }, [food, log]);
 
@@ -147,10 +187,7 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded }: Props) {
     setSaving(true);
     try {
       const ok = await addMealFromFoodWithPortion(food, mealType, payload.dateISO, g);
-      if (ok) {
-        onAdded?.();
-        onClose();
-      }
+      if (ok) { onAdded?.(); onClose(); }
     } finally {
       setSaving(false);
     }
@@ -161,18 +198,55 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded }: Props) {
       'Momento del día',
       '¿Dónde querés registrar este alimento?',
       [
-        ...MEAL_ORDER.map((mt) => ({
-          text: getMealTypeLabel(mt),
-          onPress: () => setMealType(mt),
-        })),
+        ...MEAL_ORDER.map((mt) => ({ text: getMealTypeLabel(mt), onPress: () => setMealType(mt) })),
         { text: 'Cancelar', style: 'cancel' },
       ],
     );
   }, []);
 
+  const toggleFavorite = useCallback(async () => {
+    if (!food) return;
+    const next = !favorite;
+    setFavorite(next);
+    const updated = await setFoodFavorite(food.id, next);
+    if (updated) {
+      setFavorite(!!updated.is_favorite);
+      onFoodFavoriteChange?.(updated);
+    } else {
+      setFavorite(!next);
+    }
+  }, [food, favorite, onFoodFavoriteChange]);
+
+  const handleDeleteFromCatalog = useCallback(() => {
+    if (!food) return;
+    Alert.alert(
+      'Eliminar alimento',
+      `¿Querés eliminar "${food.name}" de tu lista?`,
+      [
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              const ok = await deleteFood(food.id);
+              if (ok) {
+                onFoodDeleted?.(food.id);
+                onClose();
+              } else {
+                Alert.alert('Error', 'No se pudo eliminar el alimento. Reintentá.');
+              }
+            })();
+          },
+        },
+        { text: 'Cancelar', style: 'cancel' },
+      ],
+    );
+  }, [food, onClose, onFoodDeleted]);
+
   if (!payload) return null;
 
   const showAdd = payload.kind === 'food';
+  const heroImageUri = (food ? resolveImageUrl(food) : null) ?? log?.photo_url?.trim() ?? null;
 
   return (
     <Modal
@@ -182,55 +256,66 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded }: Props) {
       onRequestClose={onClose}
     >
       <View style={styles.backdropWrap}>
+        {/* Backdrop táctil */}
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose}>
           {Platform.OS === 'ios' ? (
-            <BlurView intensity={28} tint="dark" style={StyleSheet.absoluteFill} />
+            <BlurView intensity={22} tint="dark" style={StyleSheet.absoluteFill} />
           ) : (
             <View style={[StyleSheet.absoluteFill, styles.backdropAndroid]} />
           )}
         </Pressable>
 
-        <View
+        <Animated.View
           style={[
             styles.sheet,
-            { paddingBottom: Math.max(insets.bottom, 12), maxHeight: '92%' },
+            { paddingBottom: Math.max(insets.bottom, 16), transform: [{ translateY }] },
           ]}
         >
-          <View style={styles.sheetHandle} />
-
-          <View style={styles.headerRow}>
-            <TouchableOpacity onPress={onClose} hitSlop={12} style={styles.headerIconBtn}>
-              <MaterialCommunityIcons name="close" size={22} color={colors.text.primary} />
-            </TouchableOpacity>
-            <View style={styles.headerActions}>
-              <TouchableOpacity style={styles.headerIconBtn} hitSlop={8}>
-                <MaterialCommunityIcons name="heart-outline" size={22} color={colors.text.secondary} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.headerIconBtn} hitSlop={8}>
-                <MaterialCommunityIcons name="share-variant-outline" size={21} color={colors.text.secondary} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.headerIconBtn} hitSlop={8}>
-                <MaterialCommunityIcons name="dots-horizontal" size={22} color={colors.text.secondary} />
-              </TouchableOpacity>
-            </View>
+          {/* ── Handle: toca o desliza para cerrar ─────────────────── */}
+          <View style={styles.handleArea} {...panResponder.panHandlers}>
+            <View style={styles.handle} />
           </View>
 
+          {/* ── Favorito flotante (solo en modo food) ──────────────── */}
+          {food ? (
+            <TouchableOpacity
+              style={styles.favBtn}
+              onPress={() => void toggleFavorite()}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityLabel={favorite ? 'Quitar de favoritos' : 'Agregar a favoritos'}
+            >
+              <MaterialCommunityIcons
+                name={favorite ? 'heart' : 'heart-outline'}
+                size={22}
+                color={favorite ? colors.tertiary.default : D.textMuted}
+              />
+            </TouchableOpacity>
+          ) : null}
+
+          {/* ── Cuerpo scrolleable ─────────────────────────────────── */}
           <ScrollView
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.scrollContent}
           >
-            <View style={styles.heroImageWrap}>
-              {log?.photo_url?.trim() ? (
-                <Image source={{ uri: log.photo_url }} style={styles.heroImage} />
-              ) : (
-                <View style={styles.heroPlaceholder}>
-                  <MaterialCommunityIcons name="food-apple-outline" size={48} color={colors.text.tertiary} />
-                </View>
-              )}
+            {/* Hero */}
+            <View style={styles.heroBlock}>
+              <View style={styles.heroImageWrap}>
+                {heroImageUri ? (
+                  <Image
+                    source={{ uri: heroImageUri }}
+                    style={styles.heroImage}
+                  />
+                ) : (
+                  <View style={styles.heroPlaceholder}>
+                    <MaterialCommunityIcons name="food-apple-outline" size={30} color={D.textSoft} />
+                  </View>
+                )}
+              </View>
+
               {food?.source === 'openfoodfacts' ? (
                 <View style={styles.offBadge}>
-                  <MaterialCommunityIcons name="check-decagram" size={14} color={colors.secondary.default} />
+                  <MaterialCommunityIcons name="check-decagram" size={12} color="#FFFFFF" />
                 </View>
               ) : null}
             </View>
@@ -252,26 +337,21 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded }: Props) {
               </Text>
             ) : null}
 
-            {/* Tarjetas macros */}
+            {/* Macro cards */}
             <View style={styles.macroCards}>
               {showAdd && totalsFood ? (
                 <>
-                  <MacroCard label="Energía" value={`${Math.round(totalsFood.energy_kcal)}`} unit="kcal" accent="kcal" />
-                  <MacroCard label="Proteínas" value={fmtG(totalsFood.protein_g)} unit="g" accent="p" />
-                  <MacroCard label="Carbs" value={fmtG(totalsFood.carbs_g)} unit="g" accent="c" />
-                  <MacroCard label="Grasas" value={fmtG(totalsFood.fat_g)} unit="g" accent="f" />
+                  <MacroCard label="Energía"   value={`${Math.round(totalsFood.energy_kcal)}`} unit="kcal" />
+                  <MacroCard label="Proteínas" value={fmtG(totalsFood.protein_g)}              unit="g" />
+                  <MacroCard label="Carbs"     value={fmtG(totalsFood.carbs_g)}                unit="g" />
+                  <MacroCard label="Grasas"    value={fmtG(totalsFood.fat_g)}                  unit="g" />
                 </>
               ) : log ? (
                 <>
-                  <MacroCard
-                    label="Energía"
-                    value={log.energy_kcal != null ? `${Math.round(Number(log.energy_kcal))}` : '—'}
-                    unit="kcal"
-                    accent="kcal"
-                  />
-                  <MacroCard label="Proteínas" value={fmtG(log.protein_g)} unit="g" accent="p" />
-                  <MacroCard label="Carbs" value={fmtG(log.carbs_g)} unit="g" accent="c" />
-                  <MacroCard label="Grasas" value={fmtG(log.fat_g)} unit="g" accent="f" />
+                  <MacroCard label="Energía"   value={log.energy_kcal != null ? `${Math.round(Number(log.energy_kcal))}` : '—'} unit="kcal" />
+                  <MacroCard label="Proteínas" value={fmtG(log.protein_g)} unit="g" />
+                  <MacroCard label="Carbs"     value={fmtG(log.carbs_g)}   unit="g" />
+                  <MacroCard label="Grasas"    value={fmtG(log.fat_g)}     unit="g" />
                 </>
               ) : null}
             </View>
@@ -295,22 +375,14 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded }: Props) {
                   ) : null}
                 </View>
                 <View style={styles.legendRow}>
-                  <LegendDot
-                    color={colors.primary.default}
-                    label={`Prot. ${Math.round((showAdd ? barFood : barLog)?.pPct ?? 0)}%`}
-                  />
-                  <LegendDot
-                    color={colors.secondary.default}
-                    label={`Carbs ${Math.round((showAdd ? barFood : barLog)?.cPct ?? 0)}%`}
-                  />
-                  <LegendDot
-                    color={colors.tertiary.default}
-                    label={`Grasas ${Math.round((showAdd ? barFood : barLog)?.fPct ?? 0)}%`}
-                  />
+                  <LegendDot color={colors.primary.default}   label={`Prot. ${Math.round((showAdd ? barFood : barLog)?.pPct ?? 0)}%`} />
+                  <LegendDot color={colors.secondary.default} label={`Carbs ${Math.round((showAdd ? barFood : barLog)?.cPct ?? 0)}%`} />
+                  <LegendDot color={colors.tertiary.default}  label={`Grasas ${Math.round((showAdd ? barFood : barLog)?.fPct ?? 0)}%`} />
                 </View>
               </View>
             ) : null}
 
+            {/* Info expandible */}
             <TouchableOpacity
               style={styles.infoToggle}
               onPress={() => setInfoOpen((v) => !v)}
@@ -320,28 +392,29 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded }: Props) {
               <MaterialCommunityIcons
                 name={infoOpen ? 'chevron-up' : 'chevron-down'}
                 size={22}
-                color={colors.text.tertiary}
+                color={D.textSoft}
               />
             </TouchableOpacity>
             {infoOpen ? (
               <View style={styles.infoPanel}>
                 {showAdd && food ? (
                   <>
-                    <InfoRow label="Por 100 g — Energía" value={`${food.kcal_100g ?? '—'} kcal`} />
-                    <InfoRow label="Por 100 g — Proteínas" value={`${fmtG(food.protein_g_100g)} g`} />
-                    <InfoRow label="Por 100 g — Carbohidratos" value={`${fmtG(food.carbs_g_100g)} g`} />
-                    <InfoRow label="Por 100 g — Grasas" value={`${fmtG(food.fat_g_100g)} g`} />
+                    <InfoRow label="Por 100 g — Energía"        value={`${food.kcal_100g ?? '—'} kcal`} />
+                    <InfoRow label="Por 100 g — Proteínas"      value={`${fmtG(food.protein_g_100g)} g`} />
+                    <InfoRow label="Por 100 g — Carbohidratos"  value={`${fmtG(food.carbs_g_100g)} g`} />
+                    <InfoRow label="Por 100 g — Grasas"         value={`${fmtG(food.fat_g_100g)} g`} />
                   </>
                 ) : log ? (
                   <>
-                    <InfoRow label="Momento" value={getMealTypeLabel(log.meal_type)} />
-                    <InfoRow label="Origen" value={log.macro_source ?? '—'} />
+                    <InfoRow label="Momento"   value={getMealTypeLabel(log.meal_type)} />
+                    <InfoRow label="Origen"    value={log.macro_source ?? '—'} />
                     <InfoRow label="Registrado" value={new Date(log.created_at).toLocaleString('es-AR')} />
                   </>
                 ) : null}
               </View>
             ) : null}
 
+            {/* Inputs gramos / porción */}
             {showAdd && food ? (
               <View style={styles.inputsRow}>
                 <View style={styles.inputBox}>
@@ -352,7 +425,7 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded }: Props) {
                     value={gramsStr}
                     onChangeText={setGramsStr}
                     placeholder="100"
-                    placeholderTextColor={colors.text.disabled}
+                    placeholderTextColor={D.textSoft}
                   />
                 </View>
                 <View style={[styles.inputBox, { flex: 1.4 }]}>
@@ -373,67 +446,55 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded }: Props) {
             ) : null}
           </ScrollView>
 
-          {showAdd ? (
-            <View style={[styles.primaryBtn, saving && styles.primaryBtnDisabled]}>
-              {saving ? (
-                <ActivityIndicator color={colors.primary.text} style={{ paddingVertical: 14 }} />
-              ) : (
-                <>
-                  <TouchableOpacity
-                    style={styles.primaryBtnMain}
-                    onPress={() => void handleAdd()}
-                    activeOpacity={0.92}
-                  >
-                    <Text style={styles.primaryBtnText}>
-                      Agregar a {getMealTypeLabel(mealType)}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={pickMeal} style={styles.primaryBtnChevron} hitSlop={8} activeOpacity={0.85}>
-                    <View style={styles.primaryBtnDivider} />
-                    <MaterialCommunityIcons name="chevron-down" size={22} color={colors.primary.text} />
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
-          ) : (
-            <TouchableOpacity style={styles.secondaryBtn} onPress={onClose} activeOpacity={0.9}>
-              <Text style={styles.secondaryBtnText}>Cerrar</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+          {/* ── Footer acción ──────────────────────────────────────── */}
+          <View style={styles.sheetFooter}>
+            {showAdd ? (
+              <>
+                <View style={[styles.primaryBtn, saving && styles.primaryBtnDisabled]}>
+                  {saving ? (
+                    <ActivityIndicator color={colors.primary.text} style={{ paddingVertical: 14 }} />
+                  ) : (
+                    <>
+                      <TouchableOpacity
+                        style={styles.primaryBtnMain}
+                        onPress={() => void handleAdd()}
+                        activeOpacity={0.92}
+                      >
+                        <Text style={styles.primaryBtnText}>
+                          Agregar a {getMealTypeLabel(mealType)}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={pickMeal} style={styles.primaryBtnChevron} hitSlop={8} activeOpacity={0.85}>
+                        <View style={styles.primaryBtnDivider} />
+                        <MaterialCommunityIcons name="chevron-down" size={22} color={colors.primary.text} />
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </View>
+                <TouchableOpacity style={styles.deleteBtn} onPress={handleDeleteFromCatalog} activeOpacity={0.88}>
+                  <MaterialCommunityIcons name="trash-can-outline" size={18} color="#f08a8a" />
+                  <Text style={styles.deleteBtnText}>Eliminar de mi lista</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <TouchableOpacity style={styles.secondaryBtn} onPress={onClose} activeOpacity={0.9}>
+                <Text style={styles.secondaryBtnText}>Cerrar</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </Animated.View>
       </View>
     </Modal>
   );
 }
 
-function MacroCard({
-  label,
-  value,
-  unit,
-  accent,
-}: {
-  label: string;
-  value: string;
-  unit: string;
-  accent: 'kcal' | 'p' | 'c' | 'f';
-}) {
-  const border =
-    accent === 'kcal'
-      ? colors.primary.muted
-      : accent === 'p'
-        ? colors.primary.muted
-        : accent === 'c'
-          ? colors.secondary.muted
-          : colors.tertiary.muted;
+function MacroCard({ label, value, unit }: { label: string; value: string; unit: string; accent?: string }) {
   return (
-    <View style={[styles.macroCard, { borderColor: border }]}>
+    <View style={styles.macroCard}>
       <Text style={styles.macroCardValue}>
-        {value}
-        <Text style={styles.macroCardUnit}> {unit}</Text>
+        {value}<Text style={styles.macroCardUnit}> {unit}</Text>
       </Text>
-      <Text style={styles.macroCardLabel} numberOfLines={2}>
-        {label}
-      </Text>
+      <Text style={styles.macroCardLabel} numberOfLines={2}>{label}</Text>
     </View>
   );
 }
@@ -462,136 +523,155 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   backdropAndroid: {
-    backgroundColor: 'rgba(0,0,0,0.72)',
+    backgroundColor: 'rgba(0,0,0,0.78)',
   },
+
+  /** Sheet principal — overflow visible para que el picker overlay no quede clipeado */
   sheet: {
-    backgroundColor: colors.surface.elevated,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    borderWidth: 1,
-    borderColor: colors.border.subtle,
-    paddingHorizontal: 18,
-    paddingTop: 8,
+    backgroundColor: D.bg,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: D.borderMed,
+    maxHeight: '92%',
   },
-  sheetHandle: {
-    alignSelf: 'center',
-    width: 40,
+
+  /** Handle area — captura el gesto de deslizar */
+  handleArea: {
+    alignItems: 'center',
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
+  handle: {
+    width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    marginBottom: 8,
+    backgroundColor: 'rgba(255,255,255,0.18)',
   },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  headerIconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+
+  /** Favorito — esquina superior derecha, flotante sobre el scroll */
+  favBtn: {
+    position: 'absolute',
+    top: 10,
+    right: 16,
+    zIndex: 10,
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: D.surfaceHi,
+    borderWidth: 1,
+    borderColor: D.borderMed,
     alignItems: 'center',
     justifyContent: 'center',
   },
+
   scrollContent: {
-    paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 20,
+  },
+
+  heroBlock: {
+    alignItems: 'center',
+    marginBottom: 10,
+    marginTop: 4,
   },
   heroImageWrap: {
-    alignSelf: 'center',
-    marginBottom: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   heroImage: {
-    width: 160,
-    height: 160,
+    width: 84,
+    height: 84,
     borderRadius: 16,
-    backgroundColor: colors.surface.base,
+    backgroundColor: D.surface,
   },
   heroPlaceholder: {
-    width: 160,
-    height: 160,
+    width: 84,
+    height: 84,
     borderRadius: 16,
-    backgroundColor: colors.surface.base,
+    backgroundColor: D.surface,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: colors.border.subtle,
+    borderColor: D.border,
   },
   offBadge: {
-    position: 'absolute',
-    bottom: 8,
-    right: 8,
-    backgroundColor: 'rgba(14,14,14,0.85)',
-    borderRadius: 12,
-    padding: 4,
+    marginTop: 8,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: D.borderMed,
   },
+
   title: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '800',
-    color: colors.text.primary,
-    letterSpacing: -0.5,
+    color: D.text,
+    letterSpacing: -0.4,
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: 14,
-    color: colors.text.secondary,
+    color: D.textMuted,
     marginTop: 4,
+    textAlign: 'center',
   },
   portionHint: {
     fontSize: 12,
-    color: colors.text.tertiary,
+    color: D.textSoft,
     marginTop: 10,
     lineHeight: 17,
+    textAlign: 'center',
   },
+
   macroCards: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginTop: 16,
+    marginTop: 18,
   },
   macroCard: {
     flex: 1,
     minWidth: '22%',
     maxWidth: '25%',
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 6,
     borderRadius: 12,
     borderWidth: 1,
-    backgroundColor: colors.surface.base,
+    borderColor: D.border,
+    backgroundColor: D.surface,
   },
   macroCardValue: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '800',
-    color: colors.text.primary,
+    color: D.text,
   },
   macroCardUnit: {
     fontSize: 11,
     fontWeight: '600',
-    color: colors.text.tertiary,
+    color: D.textSoft,
   },
   macroCardLabel: {
     fontSize: 9,
     fontWeight: '600',
-    color: colors.text.tertiary,
-    marginTop: 4,
+    color: D.textMuted,
+    marginTop: 6,
     textTransform: 'uppercase',
     letterSpacing: 0.2,
   },
-  barSection: {
-    marginTop: 18,
-  },
+
+  barSection: { marginTop: 20 },
   barTrack: {
-    height: 8,
-    borderRadius: 4,
+    height: 6,
+    borderRadius: 3,
     overflow: 'hidden',
     flexDirection: 'row',
     backgroundColor: 'rgba(255,255,255,0.06)',
   },
-  barSeg: {
-    minWidth: 2,
-    height: '100%',
-  },
+  barSeg: { minWidth: 2, height: '100%' },
   legendRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -599,74 +679,93 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText: { fontSize: 11, color: colors.text.tertiary, fontWeight: '600' },
+  legendDot:  { width: 8, height: 8, borderRadius: 4 },
+  legendText: { fontSize: 11, color: D.textMuted, fontWeight: '600' },
+
   infoToggle: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: 18,
-    paddingVertical: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border.subtle,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: D.border,
+    backgroundColor: D.surface,
   },
   infoToggleText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
-    color: colors.text.primary,
+    color: D.text,
   },
   infoPanel: {
     paddingBottom: 8,
-    gap: 8,
+    gap: 0,
   },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: D.border,
   },
-  infoRowLabel: { fontSize: 13, color: colors.text.tertiary },
-  infoRowVal: { fontSize: 13, fontWeight: '600', color: colors.text.secondary, flexShrink: 1, textAlign: 'right' },
+  infoRowLabel: { fontSize: 13, color: D.textMuted },
+  infoRowVal: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: D.text,
+    flexShrink: 1,
+    textAlign: 'right',
+  },
+
   inputsRow: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 16,
+    marginTop: 18,
   },
   inputBox: {
     flex: 1,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.border.default,
+    borderColor: D.border,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: D.surface,
   },
   inputLabel: {
     fontSize: 10,
     fontWeight: '700',
-    color: colors.text.tertiary,
+    color: D.textMuted,
     textTransform: 'uppercase',
+    letterSpacing: 0.4,
     marginBottom: 6,
   },
   inputField: {
     fontSize: 18,
     fontWeight: '700',
-    color: colors.text.primary,
+    color: D.text,
     padding: 0,
   },
   inputStatic: {
     fontSize: 13,
     fontWeight: '600',
-    color: colors.text.secondary,
+    color: D.textMuted,
   },
   offAttr: {
     fontSize: 10,
-    color: colors.text.disabled,
+    color: D.textSoft,
     marginTop: 14,
     lineHeight: 14,
+    textAlign: 'center',
+  },
+
+  sheetFooter: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
   },
   primaryBtn: {
-    marginTop: 8,
     flexDirection: 'row',
     alignItems: 'stretch',
     backgroundColor: colors.primary.default,
@@ -696,21 +795,38 @@ const styles = StyleSheet.create({
   primaryBtnDivider: {
     width: 1,
     height: 28,
-    backgroundColor: 'rgba(14,14,14,0.2)',
+    backgroundColor: 'rgba(14,14,14,0.22)',
     marginRight: 8,
   },
   secondaryBtn: {
-    marginTop: 8,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 14,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: colors.border.strong,
+    borderColor: D.borderMed,
+    backgroundColor: D.surface,
   },
   secondaryBtnText: {
     fontSize: 16,
-    fontWeight: '800',
-    color: colors.text.primary,
+    fontWeight: '700',
+    color: D.text,
+  },
+  deleteBtn: {
+    marginTop: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    paddingVertical: 11,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(240,138,138,0.35)',
+    backgroundColor: 'rgba(126,30,30,0.2)',
+  },
+  deleteBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#f08a8a',
   },
 });

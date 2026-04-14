@@ -81,7 +81,6 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({
               activeIndex={state.index}
               containerWidth={barWidth}
               slotLayouts={slotLayouts}
-              pillInset={2}
             />
             {state.routes.map((route, index) => {
               const isFocused = state.index === index;
@@ -127,9 +126,9 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({
                     <Ionicons
                       name={isFocused ? tab.iconActive : tab.iconInactive}
                       size={22}
-                      color={isFocused ? ACTIVE_COLOR : INACTIVE_COLOR}
+                      color={isFocused ? '#FFFFFF' : INACTIVE_COLOR}
                     />
-                    <Text style={[styles.tabLabel, { color: isFocused ? ACTIVE_COLOR : INACTIVE_COLOR }]}>
+                    <Text style={[styles.tabLabel, { color: isFocused ? '#FFFFFF' : INACTIVE_COLOR }]}>
                       {tab.label}
                     </Text>
                   </TabItemMotion>
@@ -203,7 +202,7 @@ const styles = StyleSheet.create({
   fabButton: {
     width: 52,
     height: 44,
-    borderRadius: 14,
+    borderRadius: 12,
     backgroundColor: navigationChrome.activeIcon,
     alignItems: 'center',
     justifyContent: 'center',

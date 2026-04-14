@@ -27,8 +27,8 @@ type SlidingTabHighlightProps = {
   activeIndex: number;
   containerWidth: number;
   /**
-   * Inset dentro del slot medido (px). Más bajo = la pastilla abraza mejor ícono + label.
-   * @default 2
+   * Inset dentro del slot medido (px). Más bajo o negativo = pastilla más grande alrededor del ítem.
+   * Por defecto: `navigationChrome.tabSelectionPillInset`.
    */
   pillInset?: number;
   horizontalContentPadding?: number;
@@ -59,7 +59,7 @@ export function SlidingTabHighlight({
   tabCount,
   activeIndex,
   containerWidth,
-  pillInset = 2,
+  pillInset = navigationChrome.tabSelectionPillInset,
   horizontalContentPadding = 0,
   slotLayouts,
   style,
@@ -135,8 +135,8 @@ export function TabItemMotion({ isFocused, children, style, variant = 'default' 
       return;
     }
     if (variant === 'subtle') {
-      scale.value = withSpring(isFocused ? 1.01 : 0.99, TAB_SPRING);
-      translateY.value = withSpring(isFocused ? 0 : 0.5, TAB_SPRING);
+      scale.value = withSpring(isFocused ? 1.04 : 0.97, TAB_SPRING);
+      translateY.value = withSpring(isFocused ? 0 : 1, TAB_SPRING);
       return;
     }
     scale.value = withSpring(isFocused ? 1.05 : 0.96, TAB_SPRING);

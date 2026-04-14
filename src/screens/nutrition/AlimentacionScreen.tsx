@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, Suspense, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,8 @@ import {
   Linking,
   KeyboardAvoidingView,
   Platform,
+  Animated,
+  Image,
   type LayoutChangeEvent,
 } from 'react-native';
 import {
@@ -33,9 +35,17 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { NutritionStackParamList } from '../../navigation/types';
 import { AlimentacionEscanerPanel } from './AlimentacionEscanerPanel';
 import ComidasScreen from './ComidasScreen';
-import { searchFoods, createFood, deleteFood, type FoodRow } from '../../services/foodService';
+import {
+  searchFoods,
+  createFood,
+  deleteFood,
+  resolveImageUrl,
+  sharedImageUrl,
+  type FoodRow,
+} from '../../services/foodService';
 import { getMealTypeLabel, type MealType, type MealLog } from '../../services/mealService';
 import { FoodDetailSheet, type FoodDetailPayload } from '../../components/nutrition/FoodDetailSheet';
+import { FoodImageCatalogPicker } from '../../components/nutrition/FoodImageCatalogPicker';
 import { useUIStore } from '../../store/uiStore';
 import { colors } from '../../theme/colors';
 import {
@@ -44,6 +54,11 @@ import {
   type TabSlotLayout,
 } from '../../components/navigation/SlidingTabHighlight';
 import { navigationChrome } from '../../theme/navigationChrome';
+import { AppProgressiveHeader, HEADER_ROW_HEIGHT } from '../../components/AppProgressiveHeader';
+import {
+  SUBNAV_GAP_ABOVE_TABBAR,
+  SUBMENU_DOCK_HEIGHT,
+} from './alimentacionSnackLayout';
 
 const RegistrarComidaVoiceButton = React.lazy(
   () => import('./RegistrarComidaVoiceButton'),
@@ -101,19 +116,25 @@ function AlimentacionBuscarPanel({
   initialSearchQuery,
   onOpenFoodDetail,
   onScanForCatalog,
+  catalogRefreshKey,
 }: {
   pendingMealType: MealType | null;
   initialSearchQuery: string;
   onOpenFoodDetail: (food: FoodRow) => void;
   /** Escanear solo para agregar a la lista (sin registro del día) */
   onScanForCatalog: () => void;
+  /** Incrementar al actualizar favoritos desde el detalle */
+  catalogRefreshKey: number;
 }) {
   const [q, setQ] = useState('');
   const [foods, setFoods] = useState<FoodRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: '', kcal: '', protein: '', carbs: '', fat: '' });
+  const [manualImageKey, setManualImageKey] = useState<string | null>(null);
+  const [manualImagePickerOpen, setManualImagePickerOpen] = useState(false);
 
   useEffect(() => {
     if (initialSearchQuery) {
@@ -124,15 +145,18 @@ function AlimentacionBuscarPanel({
   useEffect(() => {
     setLoading(true);
     const t = setTimeout(() => {
-      void searchFoods(q).then((rows) => {
+      void searchFoods(q, 40, { favoritesOnly }).then((rows) => {
         setFoods(rows);
         setLoading(false);
       });
     }, 280);
     return () => clearTimeout(t);
-  }, [q]);
+  }, [q, favoritesOnly, catalogRefreshKey]);
 
-  const resetForm = () => setForm({ name: '', kcal: '', protein: '', carbs: '', fat: '' });
+  const resetForm = () => {
+    setForm({ name: '', kcal: '', protein: '', carbs: '', fat: '' });
+    setManualImageKey(null);
+  };
 
   const handleDeleteFood = useCallback(async (item: FoodRow) => {
     const ok = await deleteFood(item.id);
@@ -149,6 +173,10 @@ function AlimentacionBuscarPanel({
       Alert.alert('Falta el nombre', 'Ingresá un nombre para el alimento.');
       return;
     }
+    if (!manualImageKey) {
+      Alert.alert('Falta la imagen', 'Seleccioná una imagen del catálogo para crear el alimento.');
+      return;
+    }
     setSaving(true);
     try {
       const food = await createFood({
@@ -158,6 +186,7 @@ function AlimentacionBuscarPanel({
         carbs_g_100g: form.carbs ? parseFloat(form.carbs) : null,
         fat_g_100g: form.fat ? parseFloat(form.fat) : null,
         source: 'manual',
+        image_key: manualImageKey,
       });
       if (food) {
         setFoods((prev) => [food, ...prev]);
@@ -187,6 +216,28 @@ function AlimentacionBuscarPanel({
             <Text style={styles.buscarPendingHintMuted}>Sin momento fijo · se usa desayuno</Text>
           )}
           <Text style={styles.catSwipeHint}>Deslizá hacia la derecha y tocá Eliminar para quitar de tu lista.</Text>
+
+          <View style={styles.buscarFavoritesRow}>
+            <Text style={styles.buscarFavoritesLabel}>Solo favoritos</Text>
+            <TouchableOpacity
+              style={styles.buscarFavoritesHeartBtn}
+              onPress={() => {
+                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setFavoritesOnly((v) => !v);
+              }}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityRole="button"
+              accessibilityLabel={favoritesOnly ? 'Quitar filtro solo favoritos' : 'Filtrar solo favoritos'}
+              accessibilityState={{ selected: favoritesOnly }}
+              activeOpacity={0.75}
+            >
+              <MaterialCommunityIcons
+                name={favoritesOnly ? 'heart' : 'heart-outline'}
+                size={26}
+                color={favoritesOnly ? '#c62828' : C.muted}
+              />
+            </TouchableOpacity>
+          </View>
 
           <View style={styles.catActions}>
             <TouchableOpacity style={styles.catActionBtn} onPress={onScanForCatalog} activeOpacity={0.85}>
@@ -249,9 +300,26 @@ function AlimentacionBuscarPanel({
                 />
               </View>
               <TouchableOpacity
+                style={styles.catImagePickerBtn}
+                onPress={() => setManualImagePickerOpen(true)}
+                activeOpacity={0.85}
+              >
+                {manualImageKey ? (
+                  <>
+                    <Image source={{ uri: sharedImageUrl(manualImageKey) }} style={styles.catImagePreview} />
+                    <Text style={styles.catImagePickerLabel}>Cambiar imagen</Text>
+                  </>
+                ) : (
+                  <>
+                    <MaterialCommunityIcons name="image-plus" size={18} color={C.lime} />
+                    <Text style={styles.catImagePickerLabel}>Seleccionar imagen del catálogo *</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
                 style={styles.catSaveBtn}
                 onPress={() => void handleSaveManual()}
-                disabled={saving}
+                disabled={saving || !manualImageKey}
                 activeOpacity={0.85}
               >
                 {saving ? (
@@ -260,6 +328,12 @@ function AlimentacionBuscarPanel({
                   <Text style={styles.catSaveBtnText}>Guardar en la lista</Text>
                 )}
               </TouchableOpacity>
+              <FoodImageCatalogPicker
+                visible={manualImagePickerOpen}
+                onClose={() => setManualImagePickerOpen(false)}
+                onSelect={(key) => setManualImageKey(key || null)}
+                currentKey={manualImageKey}
+              />
             </View>
           ) : null}
 
@@ -293,11 +367,26 @@ function AlimentacionBuscarPanel({
                     onPress={() => onOpenFoodDetail(item)}
                     activeOpacity={0.85}
                   >
-                    <Text style={styles.buscarRowName}>{item.name}</Text>
-                    <Text style={styles.buscarRowMeta}>
-                      {item.kcal_100g != null ? `${item.kcal_100g} kcal/100g` : '—'}
-                      {item.brand ? ` · ${item.brand}` : ''}
-                    </Text>
+                    {/* Thumbnail — imagen personalizada, del catálogo o placeholder */}
+                    {resolveImageUrl(item) ? (
+                      <Image source={{ uri: resolveImageUrl(item)! }} style={styles.catalogRowThumb} />
+                    ) : (
+                      <View style={styles.catalogRowThumbPlaceholder}>
+                        <MaterialCommunityIcons name="food-apple-outline" size={16} color={C.muted} />
+                      </View>
+                    )}
+                    <View style={styles.catalogRowTextCol}>
+                      <Text style={styles.buscarRowName}>{item.name}</Text>
+                      <Text style={styles.buscarRowMeta}>
+                        {item.kcal_100g != null ? `${item.kcal_100g} kcal/100g` : '—'}
+                        {item.brand ? ` · ${item.brand}` : ''}
+                      </Text>
+                    </View>
+                    {item.is_favorite ? (
+                      <MaterialCommunityIcons name="heart" size={18} color="#c62828" style={styles.catalogRowHeartEnd} />
+                    ) : (
+                      <View style={styles.catalogRowHeartEndSpacer} />
+                    )}
                   </TouchableOpacity>
                 </Swipeable>
               )}
@@ -388,10 +477,17 @@ export default function AlimentacionScreen() {
   const [scannerCatalogOnly, setScannerCatalogOnly] = useState(false);
   const [detailPayload, setDetailPayload] = useState<FoodDetailPayload | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
+  /** Toast tras agregar alimento (Plan vs resto); lo muestra ComidasScreen embebido */
+  const [mealAddedToast, setMealAddedToast] = useState<string | null>(null);
+  /** Al cambiar favoritos en el detalle, el panel Buscar vuelve a consultar la lista */
+  const [catalogRefreshKey, setCatalogRefreshKey] = useState(0);
+  const bumpCatalogRefresh = useCallback(() => setCatalogRefreshKey((k) => k + 1), []);
   const [submenuBarWidth, setSubmenuBarWidth] = useState(0);
   const [submenuSlotLayouts, setSubmenuSlotLayouts] = useState<Array<TabSlotLayout | null>>(() =>
     Array(SUB_ITEMS.length).fill(null),
   );
+  /** scrollY siempre alto para que el glass del header esté visible desde el inicio */
+  const scrollY = useRef(new Animated.Value(0)).current;
 
   const onSubmenuSlotLayout = useCallback((index: number, e: LayoutChangeEvent) => {
     const { x, y, width, height } = e.nativeEvent.layout;
@@ -407,21 +503,14 @@ export default function AlimentacionScreen() {
     return i >= 0 ? i : 0;
   }, [subTab]);
 
-  /** Hueco mínimo entre submenú y tab bar (el tab bar ya incluye área segura) */
-  const SUBNAV_GAP_ABOVE_TABBAR = 2;
-  /** Altura aproximada del submenú (contenedor pastilla + márgenes) */
-  const submenuDockHeight = 86;
-  const bottomPad =
-    tabBarHeight +
-    SUBNAV_GAP_ABOVE_TABBAR +
-    submenuDockHeight +
-    Math.max(insets.bottom, 8) +
-    4;
+  const bottomPad = tabBarHeight + SUBNAV_GAP_ABOVE_TABBAR + SUBMENU_DOCK_HEIGHT + 4;
 
   useEffect(() => {
     if (subTab === 'lista') {
       setPendingMealType(null);
       setScannerCatalogOnly(false);
+    } else {
+      setMealAddedToast(null);
     }
   }, [subTab]);
 
@@ -451,28 +540,26 @@ export default function AlimentacionScreen() {
     setDetailPayload(null);
   }, []);
 
+  const clearMealAddedToast = useCallback(() => {
+    setMealAddedToast(null);
+  }, []);
+
   const onFoodDetailAdded = useCallback(() => {
+    const mt = pendingMealType;
+    const message =
+      mt != null
+        ? `Alimento agregado a ${getMealTypeLabel(mt)}`
+        : 'Alimento ingresado';
+    setMealAddedToast(message);
     setPendingMealType(null);
     closeFoodDetail();
     handleMealSaved();
-  }, [closeFoodDetail, handleMealSaved]);
+  }, [pendingMealType, closeFoodDetail, handleMealSaved]);
 
   const handleRequestAddForSlot = useCallback((mt: MealType) => {
-    Alert.alert(
-      getMealTypeLabel(mt),
-      '¿Cómo querés agregar el alimento?',
-      [
-        {
-          text: 'Buscar',
-          onPress: () => { setPendingMealType(mt); setBuscarInitialQuery(''); setSubTab('buscar'); },
-        },
-        {
-          text: 'Escanear',
-          onPress: () => { setPendingMealType(mt); setScannerCatalogOnly(false); setSubTab('escaner'); },
-        },
-        { text: 'Cancelar', style: 'cancel' },
-      ],
-    );
+    setPendingMealType(mt);
+    setBuscarInitialQuery('');
+    setSubTab('buscar');
   }, []);
 
   const renderMain = () => {
@@ -498,14 +585,10 @@ export default function AlimentacionScreen() {
       case 'lista':
         return (
           <View style={styles.listaWrap}>
-            <View style={styles.planSectionHeader}>
-              <Text style={styles.buscarTitle}>Plan</Text>
-              <Text style={styles.planSectionSub}>
-                Tu día: comidas por momento, macros y registro rápido.
-              </Text>
-            </View>
             <ComidasScreen
               embedded
+              mealAddedFeedback={mealAddedToast}
+              onMealAddedFeedbackClear={clearMealAddedToast}
               onRequestAddForSlot={handleRequestAddForSlot}
               onEmbeddedMealPress={(log) => {
                 setDetailPayload({ kind: 'meal_log', log });
@@ -519,6 +602,7 @@ export default function AlimentacionScreen() {
           <AlimentacionBuscarPanel
             pendingMealType={pendingMealType}
             initialSearchQuery={buscarInitialQuery}
+            catalogRefreshKey={catalogRefreshKey}
             onScanForCatalog={() => {
               setScannerCatalogOnly(true);
               setSubTab('escaner');
@@ -549,23 +633,30 @@ export default function AlimentacionScreen() {
   };
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top }]}>
-      <View style={[styles.content, { paddingBottom: bottomPad }]}>{renderMain()}</View>
+    <View style={styles.screen}>
+      <View style={[styles.content, { paddingBottom: bottomPad, paddingTop: insets.top + HEADER_ROW_HEIGHT }]}>{renderMain()}</View>
 
       <FoodDetailSheet
         visible={detailVisible}
         payload={detailPayload}
         onClose={closeFoodDetail}
         onAdded={onFoodDetailAdded}
+        onFoodDeleted={() => {
+          bumpCatalogRefresh();
+          closeFoodDetail();
+        }}
+        onFoodFavoriteChange={(updated) => {
+          bumpCatalogRefresh();
+          setDetailPayload((p) =>
+            p?.kind === 'food' && p.food.id === updated.id ? { ...p, food: updated } : p,
+          );
+        }}
       />
 
       <View
         style={[
           styles.submenuDockOuter,
-          {
-            bottom: tabBarHeight + SUBNAV_GAP_ABOVE_TABBAR,
-            paddingBottom: 4,
-          },
+          { bottom: tabBarHeight + SUBNAV_GAP_ABOVE_TABBAR },
         ]}
       >
         <View style={styles.submenuPill}>
@@ -578,7 +669,6 @@ export default function AlimentacionScreen() {
               activeIndex={activeSubIndex}
               containerWidth={submenuBarWidth}
               slotLayouts={submenuSlotLayouts}
-              pillInset={2}
             />
             {SUB_ITEMS.map((item, index) => {
               const active = subTab === item.key;
@@ -595,7 +685,7 @@ export default function AlimentacionScreen() {
                       <MaterialCommunityIcons
                         name={item.icon}
                         size={22}
-                        color={active ? navigationChrome.activeIcon : navigationChrome.inactiveIcon}
+                        color={active ? '#FFFFFF' : navigationChrome.inactiveIcon}
                       />
                     </View>
                     <Text
@@ -611,6 +701,12 @@ export default function AlimentacionScreen() {
           </View>
         </View>
       </View>
+
+      <AppProgressiveHeader
+        scrollY={scrollY}
+        topInset={insets.top}
+        onHomePress={() => navigation.getParent()?.navigate('HomeStack')}
+      />
     </View>
   );
 }
@@ -619,23 +715,13 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: C.bg,
+    overflow: 'visible',
   },
   content: {
     flex: 1,
   },
   listaWrap: {
     flex: 1,
-  },
-  planSectionHeader: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    marginBottom: 4,
-  },
-  planSectionSub: {
-    fontSize: 12,
-    color: C.muted,
-    lineHeight: 17,
-    marginTop: 2,
   },
   /** Área sobre el tab bar: márgenes laterales para la pastilla (fondo = pantalla) */
   submenuDockOuter: {
@@ -645,10 +731,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: navigationChrome.screenEdgeInset,
     paddingTop: 4,
   },
-  /** Contenedor tipo cápsula (referencia diseño limpio) */
+  /** Contenedor rectangular-redondeado */
   submenuPill: {
     ...navigationChrome.pillContainer,
-    overflow: 'hidden',
   },
   /** Fila + highlight comparten coordenadas */
   submenuRow: {
@@ -686,8 +771,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   submenuLabelActive: {
-    color: navigationChrome.activeIcon,
-    fontWeight: '800',
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   buscarRoot: {
     flex: 1,
@@ -795,6 +880,29 @@ const styles = StyleSheet.create({
   },
   catFormRow: { flexDirection: 'row', gap: 8 },
   catFormInputHalf: { flex: 1 },
+  catImagePickerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  catImagePreview: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: colors.surface.base,
+  },
+  catImagePickerLabel: {
+    color: C.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
   catSaveBtn: {
     backgroundColor: C.lime, borderRadius: 10,
     paddingVertical: 12, alignItems: 'center', marginTop: 4,
@@ -809,7 +917,28 @@ const styles = StyleSheet.create({
     lineHeight: 15,
     opacity: 0.9,
   },
+  buscarFavoritesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+  },
+  buscarFavoritesLabel: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: C.text,
+    marginRight: 12,
+  },
+  buscarFavoritesHeartBtn: {
+    paddingVertical: 4,
+    paddingLeft: 8,
+  },
   catalogRowCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.surface.elevated,
     borderRadius: 12,
     borderWidth: 1,
@@ -817,7 +946,27 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 14,
     marginBottom: 8,
+    gap: 10,
   },
+  catalogRowThumb: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: colors.surface.base,
+    flexShrink: 0,
+  },
+  catalogRowThumbPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: colors.surface.base,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  catalogRowHeartEnd: { flexShrink: 0 },
+  catalogRowHeartEndSpacer: { width: 18, flexShrink: 0 },
+  catalogRowTextCol: { flex: 1, minWidth: 0 },
   swipeDeleteRoot: {
     width: 112,
     justifyContent: 'center',

@@ -176,7 +176,7 @@ const AddMenuOverlay: React.FC<AddMenuOverlayProps> = ({
                 <MaterialCommunityIcons name="silverware-fork-knife" size={22} color={COLORS.tertiary} />
               </View>
               <View style={styles.gridCardText}>
-                <Text style={styles.gridCardLabel}>Comida</Text>
+                <Text style={styles.gridCardLabel}>Alimentación</Text>
                 <Text style={styles.gridCardSublabel}>LOG DE MACROS</Text>
               </View>
             </TouchableOpacity>

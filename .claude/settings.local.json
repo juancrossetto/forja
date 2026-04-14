@@ -55,7 +55,9 @@
       "WebSearch",
       "Bash(grep -E '\\\\.\\(ts|tsx\\)$')",
       "Bash(grep -E \"\\\\.ts$\")",
-      "Bash(ls /c/Repos/forja/assets/*.png /c/Repos/forja/assets/*.gif)"
+      "Bash(ls /c/Repos/forja/assets/*.png /c/Repos/forja/assets/*.gif)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
+      "Bash(grep -n \"item\\\\\\\\.name\\\\|item\\\\\\\\.\\\\|image\\\\|photo\" /c/Repos/forja/src/screens/nutrition/AlimentacionScreen.tsx)"
     ]
   }
 }

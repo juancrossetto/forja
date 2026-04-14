@@ -8,13 +8,12 @@ export const navigationChrome = {
   shellBackground: colors.background,
   shellBorderTop: colors.border.subtle,
 
-  /** Contenedor redondeado que envuelve los ítems (como la “cápsula” del reference) */
+  /** Contenedor rectangular-redondeado que envuelve los ítems */
   pillContainer: {
     backgroundColor: colors.surface.elevated,
     borderWidth: 1,
     borderColor: colors.border.default,
-    /** Muy redondeado, estilo cápsula */
-    borderRadius: 28,
+    borderRadius: 10,
   },
   /** Margen respecto a los bordes de pantalla */
   screenEdgeInset: 14,
@@ -22,19 +21,25 @@ export const navigationChrome = {
   containerPaddingV: 8,
   containerPaddingH: 6,
 
+  /**
+   * Inset del highlight respecto al slot medido del ítem (px).
+   * Negativo agranda la pastilla para que abrace mejor ícono + label (tabs y submenú).
+   */
+  tabSelectionPillInset: -4,
+
   /** Highlight que se desliza dentro del contenedor */
   selectionPill: {
-    backgroundColor: 'rgba(209, 255, 38, 0.1)',
-    borderColor: 'rgba(209, 255, 38, 0.28)',
+    backgroundColor: 'rgba(209, 255, 38, 0.13)',
+    borderColor: 'rgba(209, 255, 38, 0.48)',
     borderWidth: 1,
     shadowColor: '#d1ff26',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.16,
+    shadowOpacity: 0.22,
     shadowRadius: 6,
-    elevation: 2,
+    elevation: 3,
   },
-  /** Radio del highlight interno (un poco menor que el contenedor) */
-  pillRadius: 14,
+  /** Radio del highlight interno (proporcionalmente menor que el contenedor) */
+  pillRadius: 8,
   inactiveIcon: 'rgba(255, 255, 255, 0.4)',
   activeIcon: colors.primary.default,
 } as const;

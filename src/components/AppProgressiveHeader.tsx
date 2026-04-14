@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -58,6 +58,17 @@ export const AppProgressiveHeader: React.FC<AppProgressiveHeaderProps> = ({
   const separatorFade = scrollY.interpolate({
     inputRange: [48, 80], outputRange: [0, 1], extrapolate: 'clamp',
   });
+
+  // Monta el glass solo cuando hay scroll real — evita que BlurView (UIVisualEffectView
+  // en iOS) renderice su material nativo aunque el Animated.View padre tenga opacity:0.
+  const [glassActive, setGlassActive] = useState(false);
+  useEffect(() => {
+    const id = scrollY.addListener(({ value }) => {
+      if (value > 2)  setGlassActive(true);
+      if (value <= 0) setGlassActive(false);
+    });
+    return () => scrollY.removeListener(id);
+  }, [scrollY]);
 
   const totalHeight = HEADER_ROW_HEIGHT + topInset;
 
@@ -123,18 +134,20 @@ export const AppProgressiveHeader: React.FC<AppProgressiveHeaderProps> = ({
       style={[styles.root, { height: totalHeight }]}
       pointerEvents="box-none"
     >
-      {/* Glass background */}
-      <Animated.View
-        style={[StyleSheet.absoluteFill, { opacity: glassFade }]}
-        pointerEvents="none"
-      >
-        {Platform.OS === 'web' ? (
-          <View style={[StyleSheet.absoluteFill, styles.webBlurFill]} />
-        ) : (
-          <BlurView intensity={78} tint="dark" style={StyleSheet.absoluteFill} />
-        )}
-        <View style={[StyleSheet.absoluteFill, styles.glassDark]} />
-      </Animated.View>
+      {/* Glass background — solo se monta cuando hay scroll activo */}
+      {glassActive ? (
+        <Animated.View
+          style={[StyleSheet.absoluteFill, { opacity: glassFade }]}
+          pointerEvents="none"
+        >
+          {Platform.OS === 'web' ? (
+            <View style={[StyleSheet.absoluteFill, styles.webBlurFill]} />
+          ) : (
+            <BlurView intensity={78} tint="dark" style={StyleSheet.absoluteFill} />
+          )}
+          <View style={[StyleSheet.absoluteFill, styles.glassDark]} />
+        </Animated.View>
+      ) : null}
 
       {/* Bottom hairline */}
       <Animated.View

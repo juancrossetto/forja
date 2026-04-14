@@ -35,6 +35,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useNutritionStore } from '../../store/nutritionStore';
 import { toLocalISODate } from '../../utils/dateUtils';
 import { colors as themeColors } from '../../theme/colors';
+import { EMBEDDED_SNACK_BOTTOM_INSET } from './alimentacionSnackLayout';
 
 const PLACEHOLDER_MEAL_IMAGE = 'https://via.placeholder.com/100';
 
@@ -130,14 +131,20 @@ type ComidasScreenProps = {
   onRequestAddForSlot?: (mealType: MealType) => void;
   /** Tocar una fila del plan: abre detalle del registro */
   onEmbeddedMealPress?: (log: MealLog) => void;
+  /** Mensaje tras agregar alimento (desde Alimentación); se muestra encima del submenú */
+  mealAddedFeedback?: string | null;
+  onMealAddedFeedbackClear?: () => void;
 };
 
 const UNDO_SNACK_MS = 5000;
+const ADDED_SNACK_MS = 3800;
 
 const ComidasScreen: React.FC<ComidasScreenProps> = ({
   embedded = false,
   onRequestAddForSlot,
   onEmbeddedMealPress,
+  mealAddedFeedback = null,
+  onMealAddedFeedbackClear,
 }) => {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
@@ -146,6 +153,9 @@ const ComidasScreen: React.FC<ComidasScreenProps> = ({
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const snackOpacity = useRef(new Animated.Value(0)).current;
   const snackTranslate = useRef(new Animated.Value(16)).current;
+  const addedOpacity = useRef(new Animated.Value(0)).current;
+  const addedTranslate = useRef(new Animated.Value(12)).current;
+  const addedClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeDate = useUIStore((s) => s.activeDate);
   const setActiveDate = useUIStore((s) => s.setActiveDate);
   const targetCalories = useNutritionStore((s) => s.targetCalories);
@@ -228,13 +238,57 @@ const ComidasScreen: React.FC<ComidasScreenProps> = ({
     ]).start();
   }, [undoSnapshot, snackOpacity, snackTranslate]);
 
+  useEffect(() => {
+    if (!mealAddedFeedback) {
+      addedOpacity.setValue(0);
+      addedTranslate.setValue(12);
+      return;
+    }
+    if (addedClearTimerRef.current) {
+      clearTimeout(addedClearTimerRef.current);
+      addedClearTimerRef.current = null;
+    }
+    addedTranslate.setValue(12);
+    addedOpacity.setValue(0);
+    Animated.parallel([
+      Animated.timing(addedOpacity, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+      Animated.spring(addedTranslate, {
+        toValue: 0,
+        useNativeDriver: true,
+        friction: 8,
+        tension: 80,
+      }),
+    ]).start();
+    addedClearTimerRef.current = setTimeout(() => {
+      addedClearTimerRef.current = null;
+      onMealAddedFeedbackClear?.();
+    }, ADDED_SNACK_MS);
+    return () => {
+      if (addedClearTimerRef.current) {
+        clearTimeout(addedClearTimerRef.current);
+        addedClearTimerRef.current = null;
+      }
+    };
+  }, [mealAddedFeedback, addedOpacity, addedTranslate, onMealAddedFeedbackClear]);
+
   const snackBottomOffset = useMemo(
     () =>
       embedded
-        ? tabBarHeight + Math.max(insets.bottom, 8) + 90
-        : tabBarHeight + Math.max(insets.bottom, 8) + 12,
+        ? EMBEDDED_SNACK_BOTTOM_INSET
+        : Math.max(
+            tabBarHeight + 4,
+            tabBarHeight + Math.max(insets.bottom, 8) - 10,
+          ),
     [embedded, tabBarHeight, insets.bottom],
   );
+
+  const undoBottomOffset = snackBottomOffset;
+  const addedBottomOffset =
+    snackBottomOffset + (undoSnapshot && mealAddedFeedback ? 54 : 0);
 
   const macroTargets = useMemo(
     () => defaultMacroTargetsFromKcal(targetCalories),
@@ -390,7 +444,7 @@ const ComidasScreen: React.FC<ComidasScreenProps> = ({
             <Image source={{ uri }} style={styles.embeddedThumb} />
           ) : (
             <View style={styles.embeddedThumbPlaceholder}>
-              <MaterialCommunityIcons name="silverware-fork-knife" size={16} color={COLORS.textVariant} />
+              <MaterialCommunityIcons name="silverware-fork-knife" size={14} color={COLORS.textVariant} />
             </View>
           )}
           <View style={styles.embeddedLineBody}>
@@ -409,7 +463,7 @@ const ComidasScreen: React.FC<ComidasScreenProps> = ({
             )}
           </View>
           <View style={styles.embeddedCheckWrap}>
-            <MaterialCommunityIcons name="check" size={10} color="#FFFFFF" />
+            <MaterialCommunityIcons name="check" size={9} color="#FFFFFF" />
           </View>
         </Pressable>
       </Swipeable>
@@ -701,7 +755,7 @@ const ComidasScreen: React.FC<ComidasScreenProps> = ({
       {undoSnapshot ? (
         <View
           pointerEvents="box-none"
-          style={[styles.undoSnackbarOverlay, { bottom: snackBottomOffset }]}
+          style={[styles.undoSnackbarOverlay, { bottom: undoBottomOffset }]}
         >
           <Animated.View
             style={[
@@ -723,6 +777,25 @@ const ComidasScreen: React.FC<ComidasScreenProps> = ({
           </Animated.View>
         </View>
       ) : null}
+
+      {mealAddedFeedback ? (
+        <View
+          pointerEvents="box-none"
+          style={[styles.undoSnackbarOverlay, { bottom: addedBottomOffset, zIndex: 3 }]}
+        >
+          <Animated.View
+            style={[
+              styles.addedSnackbar,
+              {
+                opacity: addedOpacity,
+                transform: [{ translateY: addedTranslate }],
+              },
+            ]}
+          >
+            <Text style={styles.addedSnackbarText}>{mealAddedFeedback}</Text>
+          </Animated.View>
+        </View>
+      ) : null}
     </GestureHandlerRootView>
   );
 };
@@ -733,19 +806,23 @@ const styles = StyleSheet.create({
   },
   undoSnackbarOverlay: {
     position: 'absolute',
-    left: 16,
-    right: 16,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    paddingHorizontal: 40,
   },
   undoSnackbar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    width: '100%',
+    maxWidth: 280,
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: `${COLORS.text}14`,
     borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
@@ -755,14 +832,36 @@ const styles = StyleSheet.create({
   undoSnackbarText: {
     color: COLORS.text,
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '500',
     flex: 1,
+    textAlign: 'left',
   },
   undoSnackbarAction: {
     color: themeColors.primary.default,
     fontSize: 14,
-    fontWeight: '800',
-    marginLeft: 12,
+    fontWeight: '600',
+    marginLeft: 10,
+  },
+  addedSnackbar: {
+    width: '100%',
+    maxWidth: 280,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: `${COLORS.text}14`,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  addedSnackbarText: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center',
   },
   container: {
     flex: 1,
@@ -1138,7 +1237,7 @@ const styles = StyleSheet.create({
   embeddedSlots: {
     marginTop: 12,
     paddingHorizontal: 14,
-    gap: 14,
+    gap: 12,
     paddingBottom: 8,
   },
   slotCardEmbedded: {
@@ -1146,16 +1245,16 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: `${COLORS.text}0D`,
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 10,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 8,
   },
   slotTitleEmbedded: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
     color: COLORS.text,
     letterSpacing: -0.35,
-    marginBottom: 6,
+    marginBottom: 5,
   },
   slotStatsRow: {
     flexDirection: 'row',
@@ -1164,7 +1263,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   slotStatsText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: COLORS.textVariant,
     flex: 1,
@@ -1193,8 +1292,8 @@ const styles = StyleSheet.create({
   embeddedRowFront: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 10,
+    gap: 10,
+    paddingVertical: 8,
     backgroundColor: 'transparent',
   },
   embeddedRowPressed: {
@@ -1205,15 +1304,15 @@ const styles = StyleSheet.create({
     borderBottomColor: `${COLORS.text}12`,
   },
   embeddedThumb: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 9,
     backgroundColor: COLORS.surfaceHigh,
   },
   embeddedThumbPlaceholder: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 9,
     backgroundColor: COLORS.surfaceHigh,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1223,13 +1322,13 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   embeddedLineTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
     color: COLORS.text,
-    lineHeight: 20,
+    lineHeight: 18,
   },
   embeddedLinePortion: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '500',
     color: COLORS.textVariant,
     textAlign: 'right',
@@ -1241,12 +1340,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   embeddedKcal: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     color: COLORS.textVariant,
   },
   embeddedKcalMuted: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: `${COLORS.text}40`,
   },
@@ -1271,9 +1370,9 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   embeddedCheckWrap: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: themeColors.success,
     alignItems: 'center',
     justifyContent: 'center',

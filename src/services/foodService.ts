@@ -1,5 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { fetchOpenFoodFactsByBarcode } from './openFoodFactsService';
+import * as FileSystem from 'expo-file-system/legacy';
+import { decode } from 'base64-arraybuffer';
 
 export type FoodSource = 'manual' | 'voice' | 'barcode' | 'openfoodfacts' | 'import';
 
@@ -17,6 +19,16 @@ export interface FoodRow {
   source: FoodSource;
   openfoodfacts_code: string | null;
   voice_transcript: string | null;
+  /** Catálogo personal: favorito (columna en DB tras migración 023) */
+  is_favorite?: boolean | null;
+  /** URL pública de imagen personalizada (upload propio, migración 024) */
+  image_url?: string | null;
+  /**
+   * Path dentro del bucket food-images que referencia el catálogo compartido.
+   * Ej: "shared/pollo-plancha.webp"  (migración 025)
+   * resolveImageUrl() prioriza image_url > image_key > null
+   */
+  image_key?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -26,31 +38,63 @@ async function getUserId(): Promise<string | null> {
   return data?.session?.user?.id ?? null;
 }
 
-export async function searchFoods(query: string, limit = 40): Promise<FoodRow[]> {
+export type SearchFoodsOptions = {
+  favoritesOnly?: boolean;
+};
+
+export async function searchFoods(
+  query: string,
+  limit = 40,
+  opts?: SearchFoodsOptions,
+): Promise<FoodRow[]> {
   const userId = await getUserId();
   if (!userId) return [];
   const q = query.trim();
+  const fav = opts?.favoritesOnly === true;
+
+  let req = supabase.from('foods').select('*').eq('user_id', userId);
+  if (fav) {
+    req = req.eq('is_favorite', true);
+  }
   if (!q) {
-    const { data, error } = await supabase
-      .from('foods')
-      .select('*')
-      .eq('user_id', userId)
+    const { data, error } = await req
       .order('created_at', { ascending: false })
       .limit(limit);
-    if (error) { console.error('foods search:', error.message); return []; }
+    if (error) {
+      console.error('foods search:', error.message);
+      return [];
+    }
     return (data ?? []) as FoodRow[];
   }
 
-  const { data, error } = await supabase
-    .from('foods')
-    .select('*')
-    .eq('user_id', userId)
+  const { data, error } = await req
     .ilike('name', `%${q}%`)
     .order('name', { ascending: true })
     .limit(limit);
 
-  if (error) { console.error('foods search:', error.message); return []; }
+  if (error) {
+    console.error('foods search:', error.message);
+    return [];
+  }
   return (data ?? []) as FoodRow[];
+}
+
+/** Persiste favorito; devuelve la fila actualizada o null si falla. */
+export async function setFoodFavorite(id: string, isFavorite: boolean): Promise<FoodRow | null> {
+  const userId = await getUserId();
+  if (!userId) return null;
+  const { data, error } = await supabase
+    .from('foods')
+    .update({ is_favorite: isFavorite, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('user_id', userId)
+    .select('*')
+    .single();
+  if (error) {
+    console.error('setFoodFavorite:', error.message);
+    return null;
+  }
+  return data as FoodRow;
 }
 
 export async function getFoodById(id: string): Promise<FoodRow | null> {
@@ -68,6 +112,14 @@ export async function getFoodById(id: string): Promise<FoodRow | null> {
 
 /** Catálogo local o creación desde Open Food Facts; para flujo de escaneo rápido. */
 export async function resolveOrCreateFoodFromBarcode(barcode: string): Promise<FoodRow | null> {
+  return resolveOrCreateFoodFromBarcodeWithImage(barcode, null);
+}
+
+/** Igual que resolveOrCreateFoodFromBarcode pero permite fijar image_key al crear un nuevo alimento. */
+export async function resolveOrCreateFoodFromBarcodeWithImage(
+  barcode: string,
+  imageKey: string | null,
+): Promise<FoodRow | null> {
   const existing = await findFoodByBarcode(barcode);
   if (existing) return existing;
   const off = await fetchOpenFoodFactsByBarcode(barcode);
@@ -82,6 +134,7 @@ export async function resolveOrCreateFoodFromBarcode(barcode: string): Promise<F
     fat_g_100g: off.fat_g_100g,
     source: 'openfoodfacts',
     openfoodfacts_code: off.code,
+    image_key: imageKey,
   });
 }
 
@@ -112,6 +165,7 @@ export async function createFood(payload: {
   source: FoodSource;
   openfoodfacts_code?: string | null;
   voice_transcript?: string | null;
+  image_key?: string | null;
 }): Promise<FoodRow | null> {
   const userId = await getUserId();
   if (!userId) return null;
@@ -131,6 +185,7 @@ export async function createFood(payload: {
       source: payload.source,
       openfoodfacts_code: payload.openfoodfacts_code ?? null,
       voice_transcript: payload.voice_transcript ?? null,
+      image_key: payload.image_key ?? null,
     })
     .select('*')
     .single();
@@ -152,6 +207,149 @@ export async function deleteFood(id: string): Promise<boolean> {
     return false;
   }
   return true;
+}
+
+// ── Catálogo compartido de imágenes ─────────────────────────────────────────
+
+/** Extensiones de imagen reconocidas como parte del catálogo */
+const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif']);
+
+function isImageFile(name: string): boolean {
+  const ext = name.split('.').pop()?.toLowerCase() ?? '';
+  return IMAGE_EXTS.has(ext);
+}
+
+/** Construye la URL pública de una imagen del catálogo dado su key (nombre de archivo en la raíz del bucket). */
+export function sharedImageUrl(imageKey: string): string {
+  const { data } = supabase.storage.from('food-images').getPublicUrl(imageKey);
+  return data.publicUrl;
+}
+
+/**
+ * Resuelve la URL de imagen de un alimento con prioridad:
+ *   1. image_url  → foto personalizada subida por el usuario
+ *   2. image_key  → imagen del catálogo compartido
+ *   3. null       → sin imagen (mostrar placeholder)
+ */
+export function resolveImageUrl(food: Pick<FoodRow, 'image_url' | 'image_key'>): string | null {
+  if (food.image_url) return food.image_url;
+  if (food.image_key) return sharedImageUrl(food.image_key);
+  return null;
+}
+
+export interface SharedFoodImage {
+  /** Path completo dentro del bucket, ej: "shared/pollo-plancha.webp" */
+  key: string;
+  /** Nombre legible sin extensión, ej: "pollo plancha" */
+  label: string;
+  /** URL pública lista para usar en <Image> */
+  url: string;
+}
+
+/** Lista todas las imágenes del catálogo (raíz del bucket food-images). Se cachea en memoria. */
+let _sharedCache: SharedFoodImage[] | null = null;
+export async function listSharedFoodImages(): Promise<SharedFoodImage[]> {
+  if (_sharedCache) return _sharedCache;
+
+  const { data, error } = await supabase.storage
+    .from('food-images')
+    .list('', { limit: 500, sortBy: { column: 'name', order: 'asc' } });
+
+  if (error || !data) {
+    console.error('listSharedFoodImages:', error?.message);
+    return [];
+  }
+
+  const images: SharedFoodImage[] = data
+    // Excluir carpetas de usuarios (UUID) y archivos ocultos; incluir solo imágenes
+    .filter((f) => f.name && !f.name.startsWith('.') && isImageFile(f.name))
+    .map((f) => {
+      const key = f.name;                                           // ej: "banana.png"
+      const label = f.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
+      return { key, label, url: sharedImageUrl(key) };
+    });
+
+  _sharedCache = images;
+  return images;
+}
+
+/** Invalida el cache de imágenes compartidas (útil tras subir nuevas desde otro cliente). */
+export function invalidateSharedImagesCache(): void {
+  _sharedCache = null;
+}
+
+/** Asigna un image_key del catálogo a un alimento (limpia image_url para evitar conflicto visual). */
+export async function setFoodImageKey(
+  foodId: string,
+  imageKey: string | null,
+): Promise<FoodRow | null> {
+  const userId = await getUserId();
+  if (!userId) return null;
+  const { data, error } = await supabase
+    .from('foods')
+    .update({ image_key: imageKey, image_url: null, updated_at: new Date().toISOString() })
+    .eq('id', foodId)
+    .eq('user_id', userId)
+    .select('*')
+    .single();
+  if (error) { console.error('setFoodImageKey:', error.message); return null; }
+  return data as FoodRow;
+}
+
+/**
+ * Sube una imagen local al bucket food-images y actualiza image_url en la tabla.
+ * Path: {userId}/{foodId}.{ext}  — sobreescribe si ya existía.
+ * Devuelve la fila actualizada o null si falla.
+ */
+export async function uploadFoodImage(
+  foodId: string,
+  localUri: string,
+): Promise<FoodRow | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return null;
+  const userId = session.user.id;
+
+  // Detectar extensión y MIME desde la URI
+  const rawExt = localUri.split('.').pop()?.toLowerCase() ?? 'jpg';
+  const ext  = ['jpg', 'jpeg', 'png', 'webp'].includes(rawExt) ? rawExt : 'jpg';
+  const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+  const path = `${userId}/${foodId}.${ext}`;
+
+  // Eliminar archivo previo (mismo path = reemplaza)
+  await supabase.storage.from('food-images').remove([path]);
+
+  // Leer como base64 → ArrayBuffer (patrón del resto de la app)
+  const base64 = await FileSystem.readAsStringAsync(localUri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  const arrayBuffer = decode(base64);
+
+  const { error: uploadError } = await supabase.storage
+    .from('food-images')
+    .upload(path, arrayBuffer, { contentType: mime, upsert: true });
+
+  if (uploadError) {
+    console.error('uploadFoodImage storage:', uploadError.message);
+    return null;
+  }
+
+  const { data: urlData } = supabase.storage.from('food-images').getPublicUrl(path);
+  // Cache-bust para que React Native no muestre la imagen anterior cacheada
+  const imageUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+
+  const { data, error } = await supabase
+    .from('foods')
+    .update({ image_url: imageUrl, updated_at: new Date().toISOString() })
+    .eq('id', foodId)
+    .eq('user_id', userId)
+    .select('*')
+    .single();
+
+  if (error) {
+    console.error('uploadFoodImage db update:', error.message);
+    return null;
+  }
+  return data as FoodRow;
 }
 
 /** Portion totals from per-100g values. */
