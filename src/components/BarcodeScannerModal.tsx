@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { radius } from '../theme/radius';
 
 const COLORS = {
   bg: '#0e0e0e',
@@ -119,7 +120,7 @@ const styles = StyleSheet.create({
   },
   sheet: {
     backgroundColor: COLORS.surface,
-    borderRadius: 14,
+    borderRadius: radius.mdL,
     padding: 20,
   },
   topBar: {
@@ -136,7 +137,7 @@ const styles = StyleSheet.create({
   iconBtn: {
     width: 40,
     height: 40,
-    borderRadius: 10,
+    borderRadius: radius.input,
     backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
@@ -153,7 +154,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
     backgroundColor: COLORS.primary,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: radius.md,
     alignItems: 'center',
   },
   primaryBtnText: { fontWeight: '900', color: '#000', letterSpacing: 1 },

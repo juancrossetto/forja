@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, View, ViewStyle } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { radius } from '../../theme/radius';
 
 interface CardProps {
   children: React.ReactNode;
@@ -43,7 +44,7 @@ Card.displayName = 'Card';
 const styles = StyleSheet.create({
   card: {
     padding: 16,
-    borderRadius: 16,
+    borderRadius: radius.lg,
   },
   cardDefault: {
     backgroundColor: colors.surface,

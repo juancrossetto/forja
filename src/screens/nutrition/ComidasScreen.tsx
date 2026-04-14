@@ -22,12 +22,14 @@ import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { AppProgressiveHeader, HEADER_ROW_HEIGHT } from '../../components/AppProgressiveHeader';
 import {
   getMealsForDate,
   getMealTypeLabel,
   deleteMealLog,
   restoreMealLog,
+  setMealLogIncluded,
   type MealLog,
   type MealType,
 } from '../../services/mealService';
@@ -35,6 +37,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useNutritionStore } from '../../store/nutritionStore';
 import { toLocalISODate } from '../../utils/dateUtils';
 import { colors as themeColors } from '../../theme/colors';
+import { radius } from '../../theme/radius';
 import { EMBEDDED_SNACK_BOTTOM_INSET } from './alimentacionSnackLayout';
 
 const PLACEHOLDER_MEAL_IMAGE = 'https://via.placeholder.com/100';
@@ -77,8 +80,12 @@ function defaultMacroTargetsFromKcal(kcal: number) {
 
 const MEAL_SLOT_ORDER: MealType[] = ['DES', 'ALM', 'MER', 'CEN'];
 
+function mealCountsTowardTotals(m: MealLog): boolean {
+  return m.is_included !== false;
+}
+
 function sumLogs(logs: MealLog[]) {
-  return logs.reduce(
+  return logs.filter(mealCountsTowardTotals).reduce(
     (a, m) => ({
       kcal: a.kcal + (Number(m.energy_kcal) || 0),
       p: a.p + (Number(m.protein_g) || 0),
@@ -129,6 +136,44 @@ function extractPrepNote(name: string): { clean: string; note: string | null } {
     return { clean: clean || name, note: `(${kw.toLowerCase()})` };
   }
   return { clean: name, note: null };
+}
+
+type NutritionStripSize = 'compact' | 'comfortable';
+
+/** Fila tipo referencia: · kcal · N P | N C | N G (letras P/C/G en gris). */
+function MealNutritionStrip({
+  item,
+  size = 'compact',
+}: {
+  item: MealLog;
+  size?: NutritionStripSize;
+}) {
+  const kRaw = item.energy_kcal;
+  const k = kRaw != null && Number(kRaw) > 0 ? Math.round(Number(kRaw)) : null;
+  const p = Math.round(Number(item.protein_g) || 0);
+  const c = Math.round(Number(item.carbs_g) || 0);
+  const f = Math.round(Number(item.fat_g) || 0);
+  const iconSize = size === 'comfortable' ? 16 : 14;
+  const fs = size === 'comfortable' ? 12 : 11;
+  return (
+    <View style={styles.nutritionStripRow}>
+      <MaterialCommunityIcons name="fire" size={iconSize} color={COLORS.text} />
+      <Text style={[styles.nutStripKcal, { fontSize: fs }]}>
+        {k != null ? `${k} kcal` : '— kcal'}
+      </Text>
+      <Text style={[styles.nutStripDot, { fontSize: fs }]}> · </Text>
+      <Text style={[styles.nutStripMacrosBlock, { fontSize: fs }]}>
+        <Text style={styles.nutStripNum}>{p}</Text>
+        <Text style={styles.nutStripLetter}> P</Text>
+        <Text style={styles.nutStripPipe}> | </Text>
+        <Text style={styles.nutStripNum}>{c}</Text>
+        <Text style={styles.nutStripLetter}> C</Text>
+        <Text style={styles.nutStripPipe}> | </Text>
+        <Text style={styles.nutStripNum}>{f}</Text>
+        <Text style={styles.nutStripLetter}> G</Text>
+      </Text>
+    </View>
+  );
 }
 
 interface ShoppingItem {
@@ -201,11 +246,35 @@ const ComidasScreen: React.FC<ComidasScreenProps> = ({
   const [undoSnapshot, setUndoSnapshot] = useState<MealLog | null>(null);
 
   const consumedKcal = useMemo(
-    () => meals.reduce((sum, m) => sum + (Number(m.energy_kcal) || 0), 0),
+    () =>
+      meals
+        .filter((m) => m.is_included !== false)
+        .reduce((sum, m) => sum + (Number(m.energy_kcal) || 0), 0),
     [meals],
   );
   const hasKcalTotals = consumedKcal > 0;
   const remainingKcal = Math.max(0, Math.round(targetCalories - consumedKcal));
+
+  const toggleMealIncluded = useCallback(
+    async (item: MealLog) => {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const previous = item.is_included;
+      const currentlyIncluded = item.is_included !== false;
+      const nextIncluded = !currentlyIncluded;
+
+      setMeals((prev) =>
+        prev.map((m) => (m.id === item.id ? { ...m, is_included: nextIncluded } : m)),
+      );
+
+      const ok = await setMealLogIncluded(item.id, nextIncluded, activeDate);
+      if (!ok) {
+        setMeals((prev) =>
+          prev.map((m) => (m.id === item.id ? { ...m, is_included: previous } : m)),
+        );
+      }
+    },
+    [activeDate],
+  );
 
   const loadMeals = useCallback(async () => {
     setLoadingMeals(true);
@@ -330,14 +399,16 @@ const ComidasScreen: React.FC<ComidasScreenProps> = ({
 
   const consumedMacros = useMemo(
     () =>
-      meals.reduce(
-        (a, m) => ({
-          p: a.p + (Number(m.protein_g) || 0),
-          c: a.c + (Number(m.carbs_g) || 0),
-          f: a.f + (Number(m.fat_g) || 0),
-        }),
-        { p: 0, c: 0, f: 0 },
-      ),
+      meals
+        .filter((m) => m.is_included !== false)
+        .reduce(
+          (a, m) => ({
+            p: a.p + (Number(m.protein_g) || 0),
+            c: a.c + (Number(m.carbs_g) || 0),
+            f: a.f + (Number(m.fat_g) || 0),
+          }),
+          { p: 0, c: 0, f: 0 },
+        ),
     [meals],
   );
 
@@ -447,8 +518,8 @@ const ComidasScreen: React.FC<ComidasScreenProps> = ({
       getMealTypeLabel(item.meal_type);
     const { clean: title, note: prepNote } = extractPrepNote(rawTitle);
     const uri = item.photo_url?.trim() ? item.photo_url : null;
-    const k = item.energy_kcal != null && item.energy_kcal > 0 ? Math.round(item.energy_kcal) : null;
     const isLast = index === total - 1;
+    const isChecked = item.is_included !== false;
     return (
       <Swipeable
         key={item.id}
@@ -488,20 +559,24 @@ const ComidasScreen: React.FC<ComidasScreenProps> = ({
             {prepNote ? (
               <Text style={styles.embeddedLinePrepNote}>{prepNote}</Text>
             ) : null}
-          </View>
-          <View style={styles.embeddedRightCol}>
-            <Text style={styles.embeddedLinePortion} numberOfLines={1}>
+            <Text style={styles.embeddedLinePortionMeta} numberOfLines={1}>
               {formatPortionUnit(item)}
             </Text>
-            {k != null ? (
-              <Text style={styles.embeddedKcal}>{k} kcal</Text>
-            ) : (
-              <Text style={styles.embeddedKcalMuted}>—</Text>
-            )}
           </View>
-          <View style={styles.embeddedCheckWrap}>
-            <MaterialCommunityIcons name="check" size={9} color="#FFFFFF" />
+          <View style={styles.embeddedNutritionCol}>
+            <MealNutritionStrip item={item} size="compact" />
           </View>
+          <TouchableOpacity
+            onPress={() => {
+              void toggleMealIncluded(item);
+            }}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.embeddedCheckWrap, !isChecked && styles.embeddedCheckWrapEmpty]}>
+              {isChecked && <MaterialCommunityIcons name="check" size={9} color="#FFFFFF" />}
+            </View>
+          </TouchableOpacity>
         </Pressable>
       </Swipeable>
     );
@@ -519,15 +594,15 @@ const ComidasScreen: React.FC<ComidasScreenProps> = ({
       <View style={styles.mealCard}>
         <Image source={{ uri }} style={styles.mealImage} />
         <View style={styles.mealContent}>
-          <View style={styles.mealHeader}>
+          <View style={styles.mealCardTopRow}>
             <View style={styles.mealTitleSection}>
               <Text style={styles.mealTime}>
                 {formatMealTime(item.created_at)} · {typeLabel}
               </Text>
               <Text style={styles.mealName}>{title}</Text>
-              {item.energy_kcal != null && item.energy_kcal > 0 ? (
-                <Text style={styles.mealKcal}>{Math.round(item.energy_kcal)} kcal</Text>
-              ) : null}
+            </View>
+            <View style={styles.mealNutritionCol}>
+              <MealNutritionStrip item={item} size="comfortable" />
             </View>
           </View>
         </View>
@@ -857,7 +932,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: `${COLORS.text}14`,
-    borderRadius: 12,
+    borderRadius: radius.md,
     paddingVertical: 10,
     paddingHorizontal: 14,
     shadowColor: '#000',
@@ -885,7 +960,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: `${COLORS.text}14`,
-    borderRadius: 12,
+    borderRadius: radius.md,
     paddingVertical: 10,
     paddingHorizontal: 14,
     shadowColor: '#000',
@@ -914,7 +989,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 80,
     marginRight: 12,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     backgroundColor: COLORS.surface,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1018,28 +1093,36 @@ const styles = StyleSheet.create({
   },
   mealCard: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
     backgroundColor: COLORS.surface,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     padding: 16,
-    gap: 16,
+    gap: 14,
   },
   mealImage: {
     width: 96,
     height: 96,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     backgroundColor: COLORS.surfaceHigh,
   },
   mealContent: {
     flex: 1,
+    minWidth: 0,
   },
-  mealHeader: {
+  mealCardTopRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  mealNutritionCol: {
+    flexShrink: 0,
+    maxWidth: '52%',
+    alignItems: 'flex-end',
   },
   mealTitleSection: {
     flex: 1,
+    minWidth: 0,
   },
   mealTime: {
     fontSize: 10,
@@ -1054,11 +1137,35 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     letterSpacing: -0.5,
   },
-  mealKcal: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.secondary,
-    marginTop: 6,
+  nutritionStripRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    gap: 3,
+  },
+  nutStripKcal: {
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  nutStripDot: {
+    fontWeight: '500',
+    color: COLORS.textVariant,
+  },
+  nutStripMacrosBlock: {
+    fontWeight: '500',
+  },
+  nutStripNum: {
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  nutStripLetter: {
+    fontWeight: '500',
+    color: COLORS.textVariant,
+  },
+  nutStripPipe: {
+    fontWeight: '400',
+    color: `${COLORS.textVariant}CC`,
   },
   mealSpacer: {
     height: 12,
@@ -1067,7 +1174,7 @@ const styles = StyleSheet.create({
     marginTop: 32,
     marginHorizontal: 16,
     backgroundColor: COLORS.surfaceHigh,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     padding: 24,
     marginBottom: 24,
   },
@@ -1087,7 +1194,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.secondary,
     paddingHorizontal: 12,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: radius.md,
   },
   itemsCountText: {
     fontSize: 10,
@@ -1107,7 +1214,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: COLORS.bg,
     padding: 16,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     alignItems: 'center',
     gap: 12,
   },
@@ -1133,7 +1240,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderWidth: 1,
     borderColor: `${COLORS.text}1A`,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     alignItems: 'center',
   },
   manageListButtonText: {
@@ -1158,7 +1265,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 8,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: 'transparent',
   },
@@ -1187,7 +1294,7 @@ const styles = StyleSheet.create({
   dayDot: {
     width: 4,
     height: 4,
-    borderRadius: 2,
+    borderRadius: radius.xxs,
     marginTop: 6,
     backgroundColor: 'transparent',
   },
@@ -1202,7 +1309,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 14,
     marginTop: 10,
     padding: 14,
-    borderRadius: 20,
+    borderRadius: radius.xl,
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: `${COLORS.text}10`,
@@ -1221,14 +1328,14 @@ const styles = StyleSheet.create({
   },
   summaryBarTrack: {
     height: 6,
-    borderRadius: 3,
+    borderRadius: radius.xsTight,
     backgroundColor: `${COLORS.text}12`,
     marginTop: 12,
     overflow: 'hidden',
   },
   summaryBarFill: {
     height: '100%',
-    borderRadius: 3,
+    borderRadius: radius.xsTight,
     backgroundColor: COLORS.primary,
   },
   summaryBand: {
@@ -1262,14 +1369,14 @@ const styles = StyleSheet.create({
   },
   summaryMacroBarBg: {
     height: 3,
-    borderRadius: 2,
+    borderRadius: radius.xxs,
     backgroundColor: `${COLORS.text}10`,
     marginTop: 6,
     overflow: 'hidden',
   },
   summaryMacroBarFill: {
     height: '100%',
-    borderRadius: 2,
+    borderRadius: radius.xxs,
   },
   embeddedSlots: {
     marginTop: 12,
@@ -1278,7 +1385,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   slotCardEmbedded: {
-    borderRadius: 20,
+    borderRadius: radius.xl,
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: `${COLORS.text}0D`,
@@ -1321,7 +1428,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 10,
     marginTop: 2,
-    borderRadius: 14,
+    borderRadius: radius.mdL,
     backgroundColor: `${COLORS.text}06`,
     borderWidth: 1,
     borderColor: `${COLORS.text}14`,
@@ -1343,13 +1450,13 @@ const styles = StyleSheet.create({
   embeddedThumb: {
     width: 40,
     height: 40,
-    borderRadius: 10,
+    borderRadius: radius.input,
     backgroundColor: COLORS.surfaceHigh,
   },
   embeddedThumbPlaceholder: {
     width: 40,
     height: 40,
-    borderRadius: 10,
+    borderRadius: radius.input,
     backgroundColor: COLORS.surfaceHigh,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1370,28 +1477,17 @@ const styles = StyleSheet.create({
     color: COLORS.textVariant,
     marginTop: 1,
   },
-  embeddedLinePortion: {
-    fontSize: 11,
+  embeddedLinePortionMeta: {
+    fontSize: 10,
     fontWeight: '500',
-    color: COLORS.text,
-    textAlign: 'right',
+    color: `${COLORS.text}99`,
+    marginTop: 3,
   },
-  embeddedRightCol: {
+  embeddedNutritionCol: {
     alignItems: 'flex-end',
     justifyContent: 'center',
-    maxWidth: 90,
-    gap: 2,
-  },
-  embeddedKcal: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: COLORS.textVariant,
-    textAlign: 'right',
-  },
-  embeddedKcalMuted: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: `${COLORS.text}40`,
+    flexShrink: 0,
+    maxWidth: '46%',
   },
   swipeDeleteActionsWrap: {
     alignSelf: 'stretch',
@@ -1401,7 +1497,7 @@ const styles = StyleSheet.create({
   swipeDeleteReveal: {
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: radius.input,
     backgroundColor: '#FF1744',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1416,7 +1512,7 @@ const styles = StyleSheet.create({
   embeddedCheckWrap: {
     width: 18,
     height: 18,
-    borderRadius: 9,
+    borderRadius: radius.controlL,
     backgroundColor: themeColors.success,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1427,6 +1523,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.45,
     shadowRadius: 3,
     elevation: 2,
+  },
+  embeddedCheckWrapEmpty: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.25)',
+    shadowOpacity: 0,
+    elevation: 0,
   },
 });
 

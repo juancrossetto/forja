@@ -17,14 +17,17 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
+  Keyboard,
+  Platform,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { listSharedFoodImages, type SharedFoodImage } from '../../services/foodService';
 import { colors } from '../../theme/colors';
+import { radius } from '../../theme/radius';
 
 const SCREEN_H = Dimensions.get('window').height;
-const COLS = 3;
-const ITEM_GAP = 10;
+/** Miniatura en fila lista — más chica = más ítems visibles */
+const LIST_THUMB_SIZE = 44;
 
 const D = {
   bg:        '#111111',
@@ -58,6 +61,7 @@ export function FoodImageCatalogPicker({ visible, onClose, onSelect, currentKey 
   // Animación entrada / salida
   useEffect(() => {
     if (visible) {
+      Keyboard.dismiss();
       setMounted(true);
       setQuery('');
       setLoading(true);
@@ -86,6 +90,7 @@ export function FoodImageCatalogPicker({ visible, onClose, onSelect, currentKey 
   }, [query, images]);
 
   const handleSelect = useCallback((img: SharedFoodImage) => {
+    Keyboard.dismiss();
     onSelect(img.key);
     onClose();
   }, [onSelect, onClose]);
@@ -94,23 +99,25 @@ export function FoodImageCatalogPicker({ visible, onClose, onSelect, currentKey 
     const selected = item.key === currentKey;
     return (
       <TouchableOpacity
-        style={[styles.item, selected && styles.itemSelected]}
+        style={[styles.listRow, selected && styles.listRowSelected]}
         onPress={() => handleSelect(item)}
         activeOpacity={0.75}
       >
         <Image
           source={{ uri: item.url }}
-          style={styles.itemImage}
+          style={styles.listThumb}
           resizeMode="cover"
         />
-        {selected ? (
-          <View style={styles.itemCheckBadge}>
-            <MaterialCommunityIcons name="check" size={12} color="#000" />
-          </View>
-        ) : null}
-        <Text style={[styles.itemLabel, selected && styles.itemLabelSelected]} numberOfLines={2}>
+        <Text style={[styles.listRowLabel, selected && styles.itemLabelSelected]} numberOfLines={2}>
           {item.label}
         </Text>
+        {selected ? (
+          <View style={styles.listCheck}>
+            <MaterialCommunityIcons name="check" size={14} color="#000" />
+          </View>
+        ) : (
+          <MaterialCommunityIcons name="chevron-right" size={18} color={D.textSoft} />
+        )}
       </TouchableOpacity>
     );
   }, [currentKey, handleSelect]);
@@ -127,7 +134,14 @@ export function FoodImageCatalogPicker({ visible, onClose, onSelect, currentKey 
         style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: backdropOpacity }]}
         pointerEvents="auto"
       >
-        <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onClose} activeOpacity={1} />
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          onPress={() => {
+            Keyboard.dismiss();
+            onClose();
+          }}
+          activeOpacity={1}
+        />
       </Animated.View>
 
       {/* Sheet */}
@@ -159,6 +173,9 @@ export function FoodImageCatalogPicker({ visible, onClose, onSelect, currentKey 
             placeholderTextColor={D.textSoft}
             autoCorrect={false}
             clearButtonMode="while-editing"
+            returnKeyType="search"
+            blurOnSubmit
+            onSubmitEditing={() => Keyboard.dismiss()}
           />
         </View>
 
@@ -182,11 +199,11 @@ export function FoodImageCatalogPicker({ visible, onClose, onSelect, currentKey 
             data={filtered}
             keyExtractor={(item) => item.key}
             renderItem={renderItem}
-            numColumns={COLS}
-            columnWrapperStyle={styles.row}
-            contentContainerStyle={styles.grid}
+            style={styles.listScroll}
+            contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           />
         )}
 
@@ -194,7 +211,11 @@ export function FoodImageCatalogPicker({ visible, onClose, onSelect, currentKey 
         {currentKey ? (
           <TouchableOpacity
             style={styles.clearBtn}
-            onPress={() => { onSelect(''); onClose(); }}
+            onPress={() => {
+              Keyboard.dismiss();
+              onSelect('');
+              onClose();
+            }}
             activeOpacity={0.8}
           >
             <MaterialCommunityIcons name="image-remove" size={16} color={D.textMuted} />
@@ -208,7 +229,8 @@ export function FoodImageCatalogPicker({ visible, onClose, onSelect, currentKey 
 
 const styles = StyleSheet.create({
   root: {
-    zIndex: 999,
+    zIndex: 9999,
+    elevation: 24,
     justifyContent: 'flex-end',
   },
   backdrop: {
@@ -216,8 +238,8 @@ const styles = StyleSheet.create({
   },
   sheet: {
     backgroundColor: D.bg,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: D.borderMed,
     maxHeight: '88%',
@@ -230,7 +252,7 @@ const styles = StyleSheet.create({
   handle: {
     width: 36,
     height: 4,
-    borderRadius: 2,
+    borderRadius: radius.xxs,
     backgroundColor: 'rgba(255,255,255,0.18)',
   },
   header: {
@@ -255,7 +277,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 12,
     backgroundColor: D.surface,
-    borderRadius: 10,
+    borderRadius: radius.input,
     borderWidth: 1,
     borderColor: D.border,
     paddingHorizontal: 10,
@@ -268,51 +290,51 @@ const styles = StyleSheet.create({
     color: D.text,
     padding: 0,
   },
-  grid: {
-    paddingHorizontal: 16,
+  /** Altura acotada para que la lista scrollee dentro del sheet */
+  listScroll: {
+    maxHeight: SCREEN_H * 0.52,
+  },
+  listContent: {
+    paddingHorizontal: 12,
     paddingBottom: 8,
   },
-  row: {
-    gap: ITEM_GAP,
-    marginBottom: ITEM_GAP,
-  },
-  item: {
-    flex: 1,
-    maxWidth: `${100 / COLS - 2}%` as any,
-    borderRadius: 12,
-    overflow: 'hidden',
+  listRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    marginBottom: 4,
+    borderRadius: radius.input,
     backgroundColor: D.surface,
     borderWidth: 1,
     borderColor: D.border,
   },
-  itemSelected: {
+  listRowSelected: {
     borderColor: D.lime,
-    borderWidth: 2,
+    borderWidth: 1,
+    backgroundColor: 'rgba(209, 255, 38, 0.06)',
   },
-  itemImage: {
-    width: '100%',
-    aspectRatio: 1,
+  listThumb: {
+    width: LIST_THUMB_SIZE,
+    height: LIST_THUMB_SIZE,
+    borderRadius: radius.sm,
     backgroundColor: D.surfaceHi,
   },
-  itemCheckBadge: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+  listRowLabel: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: D.textMuted,
+    textTransform: 'capitalize',
+  },
+  listCheck: {
+    width: 22,
+    height: 22,
+    borderRadius: radius.chip,
     backgroundColor: D.lime,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  itemLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: D.textMuted,
-    paddingHorizontal: 6,
-    paddingVertical: 5,
-    textAlign: 'center',
-    textTransform: 'capitalize',
   },
   itemLabelSelected: {
     color: D.lime,
@@ -338,7 +360,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginTop: 4,
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: radius.input,
     borderWidth: 1,
     borderColor: D.border,
     backgroundColor: D.surface,

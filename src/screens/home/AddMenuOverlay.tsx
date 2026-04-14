@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { radius } from '../../theme/radius';
 
 const { width, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -273,7 +274,7 @@ const styles = StyleSheet.create({
   closeButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: radius.xl,
     backgroundColor: COLORS.surfaceHighest,
     justifyContent: 'center',
     alignItems: 'center',
@@ -288,7 +289,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 20,
-    borderRadius: 16,
+    borderRadius: radius.lg,
     backgroundColor: 'rgba(14,14,14,0.8)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.05)',
@@ -302,7 +303,7 @@ const styles = StyleSheet.create({
   mainCardIcon: {
     width: 48,
     height: 48,
-    borderRadius: 12,
+    borderRadius: radius.md,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -334,7 +335,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 20,
     paddingVertical: 20,
-    borderRadius: 16,
+    borderRadius: radius.lg,
     backgroundColor: 'rgba(14,14,14,0.8)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.05)',
@@ -343,7 +344,7 @@ const styles = StyleSheet.create({
   gridCardIcon: {
     width: 40,
     height: 40,
-    borderRadius: 12,
+    borderRadius: radius.md,
     justifyContent: 'center',
     alignItems: 'center',
   },

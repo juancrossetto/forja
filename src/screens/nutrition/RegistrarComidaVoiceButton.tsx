@@ -5,6 +5,7 @@ import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
 } from 'expo-speech-recognition';
+import { radius } from '../../theme/radius';
 
 const COLORS = {
   secondary: '#00e3fd',
@@ -80,7 +81,7 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: COLORS.secondary,
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: radius.input,
   },
   actionBtnVoice: {},
   actionBtnText: { fontSize: 11, fontWeight: '800', color: '#000', letterSpacing: 0.5 },

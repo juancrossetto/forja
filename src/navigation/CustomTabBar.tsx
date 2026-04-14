@@ -17,6 +17,7 @@ import {
 } from '../components/navigation/SlidingTabHighlight';
 import { navigationChrome } from '../theme/navigationChrome';
 import { colors } from '../theme/colors';
+import { radius } from '../theme/radius';
 
 const INACTIVE_COLOR = navigationChrome.inactiveIcon;
 const ACTIVE_COLOR = navigationChrome.activeIcon;
@@ -102,7 +103,14 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({
                   target: route.key,
                   canPreventDefault: true,
                 });
-                if (!isFocused && !event.defaultPrevented) navigation.navigate(route.name);
+                if (!event.defaultPrevented) {
+                  if (route.name === 'HomeStack') {
+                    // Siempre abre la pantalla Comunidad al tocar este tab
+                    navigation.navigate('HomeStack', { screen: 'Comunidad' } as any);
+                  } else if (!isFocused) {
+                    navigation.navigate(route.name);
+                  }
+                }
               };
 
               if (tab.isFab) {
@@ -183,7 +191,7 @@ const styles = StyleSheet.create({
     borderWidth: 0,
     shadowOpacity: 0,
     elevation: 0,
-    borderRadius: 999,
+    borderRadius: radius.full,
   },
   tabButton: {
     flex: 1,
@@ -214,7 +222,7 @@ const styles = StyleSheet.create({
   fabButton: {
     width: 52,
     height: 44,
-    borderRadius: 12,
+    borderRadius: radius.md,
     backgroundColor: navigationChrome.activeIcon,
     alignItems: 'center',
     justifyContent: 'center',

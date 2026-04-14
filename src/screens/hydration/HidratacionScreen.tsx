@@ -21,6 +21,7 @@ import {
 } from '../../services/hydrationService';
 import { useUIStore } from '../../store/uiStore';
 import { formatDate, todayISO as getTodayISO } from '../../utils/dateUtils';
+import { radius } from '../../theme/radius';
 
 const { width, height } = Dimensions.get('window');
 
@@ -339,7 +340,7 @@ const styles = StyleSheet.create({
   backBtn: {
     width: 36,
     height: 36,
-    borderRadius: 10,
+    borderRadius: radius.input,
     backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
@@ -350,7 +351,7 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 9, color: COLORS.secondary, letterSpacing: 1.5, textTransform: 'uppercase', opacity: 0.8, marginTop: 1 },
   dateBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: 'rgba(0,227,253,0.12)', borderRadius: 7,
+    backgroundColor: 'rgba(0,227,253,0.12)', borderRadius: radius.avatarTight,
     paddingHorizontal: 8, paddingVertical: 5,
     borderWidth: 1, borderColor: 'rgba(0,227,253,0.25)',
   },
@@ -358,7 +359,7 @@ const styles = StyleSheet.create({
 
   // Water box
   waterBox: {
-    width: BOX_W, height: BOX_H, borderRadius: 18,
+    width: BOX_W, height: BOX_H, borderRadius: radius.panel,
     backgroundColor: COLORS.surface, overflow: 'hidden',
     marginBottom: 14, justifyContent: 'center', alignItems: 'center',
     alignSelf: 'center',
@@ -368,13 +369,13 @@ const styles = StyleSheet.create({
   bigValue: { fontSize: 60, fontWeight: '900', color: COLORS.text, lineHeight: 68 },
   goalValue: { fontSize: 22, fontWeight: '500', color: COLORS.textVariant },
   litrosLabel: { fontSize: 10, color: COLORS.secondary, letterSpacing: 3, textTransform: 'uppercase', marginTop: 2 },
-  bubble1: { position: 'absolute', top: '25%', left: '22%', width: 8, height: 8, borderRadius: 4, backgroundColor: 'rgba(0,227,253,0.4)' },
-  bubble2: { position: 'absolute', top: '40%', left: '35%', width: 4, height: 4, borderRadius: 2, backgroundColor: 'rgba(0,227,253,0.6)' },
+  bubble1: { position: 'absolute', top: '25%', left: '22%', width: 8, height: 8, borderRadius: radius.xs, backgroundColor: 'rgba(0,227,253,0.4)' },
+  bubble2: { position: 'absolute', top: '40%', left: '35%', width: 4, height: 4, borderRadius: radius.xxs, backgroundColor: 'rgba(0,227,253,0.6)' },
 
   // Quick add buttons
   quickAdd: { flexDirection: 'row', gap: 10, marginBottom: 14 },
   addBtn: {
-    flex: 1, backgroundColor: COLORS.surfaceHighest, borderRadius: 12,
+    flex: 1, backgroundColor: COLORS.surfaceHighest, borderRadius: radius.md,
     paddingVertical: 14, alignItems: 'center', gap: 6,
   },
   addBtnPrimary: { backgroundColor: COLORS.primaryContainer },
@@ -383,13 +384,13 @@ const styles = StyleSheet.create({
   // Chart
   chartCard: {
     height: Math.round(height * 0.28),
-    backgroundColor: COLORS.surfaceLow, borderRadius: 14,
+    backgroundColor: COLORS.surfaceLow, borderRadius: radius.mdL,
     padding: 16, borderWidth: 1, borderColor: 'rgba(72,72,71,0.15)',
     marginBottom: 14,
   },
   chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   chartTitle: { fontSize: 13, fontWeight: '700', color: COLORS.text, letterSpacing: 0.5 },
-  avgBadge: { backgroundColor: 'rgba(0,104,117,0.3)', borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3 },
+  avgBadge: { backgroundColor: 'rgba(0,104,117,0.3)', borderRadius: radius.smTight, paddingHorizontal: 7, paddingVertical: 3 },
   avgBadgeText: { fontSize: 9, color: COLORS.secondary, letterSpacing: 0.5 },
 
   chartBars: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
@@ -397,9 +398,9 @@ const styles = StyleSheet.create({
   barTrack: {
     flex: 1, width: '100%',
     backgroundColor: COLORS.surfaceHighest,
-    borderRadius: 4, justifyContent: 'flex-end', overflow: 'hidden',
+    borderRadius: radius.xs, justifyContent: 'flex-end', overflow: 'hidden',
   },
-  barFill: { width: '100%', borderRadius: 4 },
+  barFill: { width: '100%', borderRadius: radius.xs },
   // Past days: muted primary tint so they're visible but not dominant
   barFillPast: { backgroundColor: 'rgba(209,255,38,0.4)' },
   // Today: bright secondary
@@ -410,7 +411,7 @@ const styles = StyleSheet.create({
   // Save button
   footer: { paddingBottom: 4 },
   saveBtn: {
-    backgroundColor: COLORS.primary, borderRadius: 14, paddingVertical: 16,
+    backgroundColor: COLORS.primary, borderRadius: radius.mdL, paddingVertical: 16,
     alignItems: 'center',
     shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3, shadowRadius: 16, elevation: 8,

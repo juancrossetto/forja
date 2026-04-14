@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, View, Text, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { radius } from '../../theme/radius';
 
 interface MetricCardProps {
   label: string;
@@ -70,7 +71,7 @@ MetricCard.displayName = 'MetricCard';
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surfaceElevated,
-    borderRadius: 16,
+    borderRadius: radius.lg,
     padding: 16,
     justifyContent: 'space-between',
   },

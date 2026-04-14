@@ -29,6 +29,7 @@ import {
   type HealthSummary,
   type HealthPermissions,
 } from '../../services/healthService';
+import { radius } from '../../theme/radius';
 
 const { width } = Dimensions.get('window');
 
@@ -478,7 +479,7 @@ const styles = StyleSheet.create({
   profileHeader: { alignItems: 'center', marginBottom: 32 },
   avatarWrapper: { position: 'relative', marginBottom: 16 },
   avatar: {
-    width: 120, height: 120, borderRadius: 18,
+    width: 120, height: 120, borderRadius: radius.panel,
     borderWidth: 2, borderColor: 'rgba(209,255,38,0.3)',
   },
   avatarPlaceholder: {
@@ -487,7 +488,7 @@ const styles = StyleSheet.create({
   },
   cameraBtn: {
     position: 'absolute', bottom: 4, right: 4,
-    width: 32, height: 32, borderRadius: 16,
+    width: 32, height: 32, borderRadius: radius.lg,
     backgroundColor: COLORS.primary,
     justifyContent: 'center', alignItems: 'center',
   },
@@ -503,7 +504,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     backgroundColor: COLORS.surfaceLow,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1, borderColor: 'rgba(209,255,38,0.18)',
     justifyContent: 'center', alignItems: 'center', gap: 6,
   },
@@ -512,7 +513,7 @@ const styles = StyleSheet.create({
   // Composition card
   compositionCard: {
     backgroundColor: COLORS.surfaceLowest,
-    borderRadius: 16, padding: 24,
+    borderRadius: radius.lg, padding: 24,
     marginBottom: 28, overflow: 'hidden',
   },
   silhouetteBox: {
@@ -522,7 +523,7 @@ const styles = StyleSheet.create({
   },
   silhouetteImage: { width: '100%', height: '100%', opacity: 0.4 },
   dot: {
-    position: 'absolute', width: 14, height: 14, borderRadius: 7,
+    position: 'absolute', width: 14, height: 14, borderRadius: radius.avatarTight,
     shadowColor: COLORS.primary, shadowOpacity: 0.6, shadowRadius: 8,
   },
   compositionTitle: {
@@ -536,7 +537,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 10, paddingVertical: 10,
     backgroundColor: COLORS.surfaceHigh,
-    borderRadius: 8, borderLeftWidth: 2,
+    borderRadius: radius.sm, borderLeftWidth: 2,
   },
   metricLabel: { fontSize: 8, fontWeight: '700', color: COLORS.textVariant, letterSpacing: 1, marginBottom: 4 },
   metricValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },
@@ -544,7 +545,7 @@ const styles = StyleSheet.create({
   metricUnit: { fontSize: 10, color: COLORS.textDim, fontWeight: '600' },
   updateBtn: {
     marginTop: 8, paddingVertical: 14,
-    backgroundColor: COLORS.primary, borderRadius: 10, alignItems: 'center',
+    backgroundColor: COLORS.primary, borderRadius: radius.input, alignItems: 'center',
   },
   updateBtnText: { fontSize: 12, fontWeight: '700', color: '#000', letterSpacing: 1.5 },
 
@@ -554,11 +555,11 @@ const styles = StyleSheet.create({
   deviceCard: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 16,
-    backgroundColor: COLORS.surface, borderRadius: 12, marginBottom: 10,
+    backgroundColor: COLORS.surface, borderRadius: radius.md, marginBottom: 10,
   },
   deviceLeft: { flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1 },
   deviceIconBox: {
-    width: 40, height: 40, borderRadius: 8,
+    width: 40, height: 40, borderRadius: radius.sm,
     backgroundColor: 'rgba(255,255,255,0.05)',
     justifyContent: 'center', alignItems: 'center',
   },
@@ -573,7 +574,7 @@ const styles = StyleSheet.create({
   // Apple Health data card
   healthCard: {
     backgroundColor: COLORS.surface,
-    borderRadius: 16, padding: 20,
+    borderRadius: radius.lg, padding: 20,
     marginBottom: 28,
     borderWidth: 1, borderColor: 'rgba(209,255,38,0.12)',
   },
@@ -601,7 +602,7 @@ const styles = StyleSheet.create({
   // Plan card
   planCard: {
     backgroundColor: COLORS.primary,
-    borderRadius: 16, padding: 28,
+    borderRadius: radius.lg, padding: 28,
     marginBottom: 24, overflow: 'hidden',
   },
   planTitle: { fontSize: 28, fontWeight: '900', color: '#000', letterSpacing: -0.5, fontStyle: 'italic', marginBottom: 8 },
@@ -609,20 +610,20 @@ const styles = StyleSheet.create({
   planStats: { flexDirection: 'row', gap: 12, marginBottom: 24 },
   planStat: {
     paddingHorizontal: 14, paddingVertical: 10,
-    backgroundColor: 'rgba(0,0,0,0.1)', borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.1)', borderRadius: radius.sm,
   },
   planStatLabel: { fontSize: 8, fontWeight: '700', color: 'rgba(0,0,0,0.5)', letterSpacing: 1, marginBottom: 2 },
   planStatValue: { fontSize: 13, fontWeight: '700', color: '#000' },
   planBtn: {
     paddingVertical: 14, paddingHorizontal: 28,
-    backgroundColor: '#000', borderRadius: 10, alignSelf: 'flex-start',
+    backgroundColor: '#000', borderRadius: radius.input, alignSelf: 'flex-start',
     flexDirection: 'row', alignItems: 'center', gap: 6,
   },
   planBtnText: { fontSize: 11, fontWeight: '700', color: COLORS.primary, letterSpacing: 1.5 },
   noPlanBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     backgroundColor: 'rgba(0,0,0,0.2)', alignSelf: 'flex-start',
-    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, marginBottom: 14,
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.xl, marginBottom: 14,
   },
   noPlanBadgeText: { fontSize: 9, fontWeight: '700', color: '#000', letterSpacing: 1.5 },
   noPlanDesc: { fontSize: 13, color: 'rgba(0,0,0,0.7)', lineHeight: 20, marginBottom: 20 },
@@ -631,7 +632,7 @@ const styles = StyleSheet.create({
   logoutBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 8, paddingVertical: 16,
-    borderWidth: 1, borderColor: COLORS.tertiary, borderRadius: 12,
+    borderWidth: 1, borderColor: COLORS.tertiary, borderRadius: radius.md,
     marginBottom: 16,
   },
   logoutText: { fontSize: 12, fontWeight: '700', color: COLORS.tertiary, letterSpacing: 1.5 },

@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { CommonActions } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTrainingStore } from '../../store/trainingStore';
+import { radius } from '../../theme/radius';
 
 const colors = {
   bg: '#0e0e0e',
@@ -414,7 +415,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 227, 253, 0.2)',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: radius.xl,
   },
   exerciseTagText: {
     fontSize: 10,
@@ -426,7 +427,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: radius.xl,
   },
   roundTagText: {
     fontSize: 10,
@@ -439,7 +440,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     paddingHorizontal: 12,
     paddingVertical: 4,
-    borderRadius: 20,
+    borderRadius: radius.xl,
   },
   countTagText: {
     fontSize: 10,
@@ -457,7 +458,7 @@ const styles = StyleSheet.create({
   progressBar: {
     height: 4,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 2,
+    borderRadius: radius.xxs,
     overflow: 'hidden',
   },
   progressFill: {
@@ -467,7 +468,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.elevated,
     borderLeftWidth: 4,
     borderLeftColor: colors.primary,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     paddingVertical: 24,
     paddingHorizontal: 24,
     alignItems: 'center',
@@ -505,14 +506,14 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 2,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 1,
+    borderRadius: radius.hairline,
     position: 'relative',
   },
   timelinePointer: {
     width: 8,
     height: 8,
     backgroundColor: colors.primary,
-    borderRadius: 4,
+    borderRadius: radius.xs,
     position: 'absolute',
     top: -3,
   },
@@ -527,7 +528,7 @@ const styles = StyleSheet.create({
   metricCard: {
     flex: 1,
     backgroundColor: colors.surface,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     paddingVertical: 16,
     paddingHorizontal: 12,
   },
@@ -552,7 +553,7 @@ const styles = StyleSheet.create({
   },
   nextExercise: {
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 8,
+    borderRadius: radius.sm,
     paddingVertical: 12,
     paddingHorizontal: 16,
     flexDirection: 'row',
@@ -563,7 +564,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     backgroundColor: colors.bg,
-    borderRadius: 6,
+    borderRadius: radius.control,
     overflow: 'hidden',
   },
   nextImage: {
@@ -623,7 +624,7 @@ const styles = StyleSheet.create({
   controlIconWrap: {
     width: 40,
     height: 40,
-    borderRadius: 12,
+    borderRadius: radius.md,
     backgroundColor: 'rgba(255,255,255,0.07)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -656,7 +657,7 @@ const styles = StyleSheet.create({
     maxWidth: 400,
     marginHorizontal: 24,
     backgroundColor: colors.surface,
-    borderRadius: 16,
+    borderRadius: radius.lg,
     padding: 22,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
@@ -686,7 +687,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 10,
+    borderRadius: radius.input,
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
   abandonBtnSecondaryText: {
@@ -699,7 +700,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 10,
+    borderRadius: radius.input,
     backgroundColor: 'rgba(255,80,80,0.2)',
     borderWidth: 1,
     borderColor: 'rgba(255,120,120,0.45)',
@@ -712,7 +713,7 @@ const styles = StyleSheet.create({
   playButton: {
     width: 64,
     height: 64,
-    borderRadius: 32,
+    borderRadius: radius.xxxl,
     backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',

@@ -19,6 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CommonActions, useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
+import { radius } from '../../theme/radius';
 
 import {
   getGoalsForDate,
@@ -763,7 +764,7 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: COLORS.primaryDim,
     backgroundColor: COLORS.surfaceLow,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   mindsetLabel: {
     fontSize: 9,
@@ -790,7 +791,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingRight: 36,
     backgroundColor: COLORS.surfaceLow,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     borderLeftWidth: 3,
     borderLeftColor: COLORS.primaryDim,
     position: 'relative',
@@ -829,7 +830,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 12,
     paddingHorizontal: 14,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: 'rgba(209,255,38,0.35)',
     backgroundColor: COLORS.surfaceLow,
@@ -867,7 +868,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     width: 76,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     marginLeft: 10,
   },
   customMetaPressed: {
@@ -938,16 +939,16 @@ const styles = StyleSheet.create({
   progressBarContainer: {
     height: 4,
     backgroundColor: COLORS.surfaceHighest,
-    borderRadius: 2,
+    borderRadius: radius.xxs,
     overflow: 'hidden',
   },
   progressBarFill: {
     height: '100%',
-    borderRadius: 2,
+    borderRadius: radius.xxs,
   },
   progressBarFillSolid: {
     height: '100%',
-    borderRadius: 2,
+    borderRadius: radius.xxs,
     backgroundColor: COLORS.secondary,
   },
   trainingBarFill: {
@@ -961,7 +962,7 @@ const styles = StyleSheet.create({
   sessionBar: {
     flex: 1,
     height: 3,
-    borderRadius: 2,
+    borderRadius: radius.xxs,
   },
   waterGlasses: {
     flexDirection: 'row',
@@ -972,12 +973,12 @@ const styles = StyleSheet.create({
   waterGlass: {
     flex: 1,
     height: 6,
-    borderRadius: 2,
+    borderRadius: radius.xxs,
     backgroundColor: COLORS.secondary,
   },
   cardCta: {
     paddingVertical: 10,
-    borderRadius: 6,
+    borderRadius: radius.control,
     alignItems: 'center',
     backgroundColor: COLORS.surfaceHighest,
     borderWidth: 1,
@@ -1009,7 +1010,7 @@ const styles = StyleSheet.create({
   },
   chartBar: {
     flex: 1,
-    borderRadius: 2,
+    borderRadius: radius.xxs,
     minHeight: 4,
   },
   chartLegend: {
@@ -1046,7 +1047,7 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    borderRadius: radius.md,
     padding: 20,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
@@ -1066,7 +1067,7 @@ const styles = StyleSheet.create({
   modalInput: {
     borderWidth: 1,
     borderColor: COLORS.surfaceHighest,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 20,
@@ -1076,7 +1077,7 @@ const styles = StyleSheet.create({
   modalInputMultiline: {
     borderWidth: 1,
     borderColor: COLORS.surfaceHighest,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
@@ -1114,7 +1115,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     paddingVertical: 10,
     paddingHorizontal: 20,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   modalBtnText: {
     color: '#0e0e0e',

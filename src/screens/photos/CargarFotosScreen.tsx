@@ -17,6 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { uploadProgressPhoto, type PhotoPosition } from '../../services/photosService';
+import { radius } from '../../theme/radius';
 
 const COLORS = {
   bg: '#0e0e0e',
@@ -290,7 +291,7 @@ const styles = StyleSheet.create({
   backBtn: {
     width: 36,
     height: 36,
-    borderRadius: 10,
+    borderRadius: radius.input,
     backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
@@ -347,7 +348,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderStyle: 'dashed',
     borderColor: 'rgba(193, 237, 0, 0.35)',
-    borderRadius: 12,
+    borderRadius: radius.md,
     backgroundColor: COLORS.surface,
     overflow: 'hidden',
     position: 'relative',
@@ -363,7 +364,7 @@ const styles = StyleSheet.create({
   personIconBg: {
     width: 72,
     height: 72,
-    borderRadius: 10,
+    borderRadius: radius.input,
     backgroundColor: 'rgba(193, 237, 0, 0.08)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -406,7 +407,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 12,
     backgroundColor: COLORS.primary,
-    borderRadius: 6,
+    borderRadius: radius.control,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -421,7 +422,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     backgroundColor: COLORS.surfaceHighest,
-    borderRadius: 6,
+    borderRadius: radius.control,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -461,7 +462,7 @@ const styles = StyleSheet.create({
   dot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
+    borderRadius: radius.xsTight,
     backgroundColor: COLORS.surfaceHighest,
   },
   dotActive: {
@@ -474,7 +475,7 @@ const styles = StyleSheet.create({
   saveBtn: {
     height: 52,
     backgroundColor: COLORS.primary,
-    borderRadius: 10,
+    borderRadius: radius.input,
     justifyContent: 'center',
     alignItems: 'center',
   },

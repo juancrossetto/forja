@@ -12,6 +12,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTrainingStore } from '../../store/trainingStore';
+import { radius } from '../../theme/radius';
 
 const colors = {
   bg: '#0e0e0e',
@@ -314,7 +315,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#006875',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 4,
+    borderRadius: radius.xs,
   },
   tagText: {
     fontSize: 10,
@@ -327,7 +328,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.elevated,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 4,
+    borderRadius: radius.xs,
   },
   tagTextSecondary: {
     fontSize: 10,
@@ -381,7 +382,7 @@ const styles = StyleSheet.create({
     borderLeftWidth: 2,
     borderLeftColor: colors.primary,
     padding: 24,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   instructionLabel: {
     fontSize: 10,
@@ -418,7 +419,7 @@ const styles = StyleSheet.create({
   exerciseCard: {
     width: '100%',
     backgroundColor: colors.surface,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     overflow: 'hidden',
     flexDirection: 'row',
   },
@@ -475,7 +476,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderStyle: 'dashed',
     borderColor: 'rgba(72, 72, 71, 0.3)',
-    borderRadius: 8,
+    borderRadius: radius.sm,
     justifyContent: 'center',
     alignItems: 'center',
     minHeight: 96,
@@ -497,7 +498,7 @@ const styles = StyleSheet.create({
   statCard: {
     flex: 1,
     backgroundColor: colors.elevated,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     paddingVertical: 16,
     alignItems: 'center',
     justifyContent: 'center',
@@ -531,7 +532,7 @@ const styles = StyleSheet.create({
   },
   startButton: {
     backgroundColor: colors.primary,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     paddingVertical: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',

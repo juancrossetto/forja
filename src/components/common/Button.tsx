@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { radius } from '../../theme/radius';
 
 interface ButtonProps {
   title: string;
@@ -156,7 +157,7 @@ Button.displayName = 'Button';
 
 const styles = StyleSheet.create({
   button: {
-    borderRadius: 12,
+    borderRadius: radius.md,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -166,7 +167,7 @@ const styles = StyleSheet.create({
   gradientButton: {
     width: '100%',
     height: '100%',
-    borderRadius: 12,
+    borderRadius: radius.md,
     justifyContent: 'center',
     alignItems: 'center',
   },

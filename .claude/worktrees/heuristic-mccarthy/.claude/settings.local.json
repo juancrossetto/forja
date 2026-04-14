@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(tasklist)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)",
+      "Read(//c/Repos//**)",
+      "Bash(cmd.exe /c \"cd C:\\\\Repos\\\\forja && npx tsc --noEmit 2>&1\")",
+      "Bash(xargs grep:*)"
     ]
   }
 }

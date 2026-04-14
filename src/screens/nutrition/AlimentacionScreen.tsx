@@ -46,6 +46,7 @@ import { FoodDetailSheet, type FoodDetailPayload } from '../../components/nutrit
 import { FoodImageCatalogPicker } from '../../components/nutrition/FoodImageCatalogPicker';
 import { useUIStore } from '../../store/uiStore';
 import { colors } from '../../theme/colors';
+import { radius } from '../../theme/radius';
 import {
   SlidingTabHighlight,
   TabItemMotion,
@@ -335,7 +336,10 @@ function AlimentacionBuscarPanel({
               </View>
               <TouchableOpacity
                 style={styles.catImagePickerBtn}
-                onPress={() => setManualImagePickerOpen(true)}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setManualImagePickerOpen(true);
+                }}
                 activeOpacity={0.85}
               >
                 {manualImageKey ? (
@@ -856,7 +860,7 @@ const styles = StyleSheet.create({
   },
   buscarInput: {
     backgroundColor: colors.surface.elevated,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: C.border,
     paddingHorizontal: 14,
@@ -890,7 +894,7 @@ const styles = StyleSheet.create({
     gap: 10,
     backgroundColor: 'rgba(255,255,255,0.06)',
     padding: 16,
-    borderRadius: 12,
+    borderRadius: radius.md,
   },
   vozDisabledText: { color: C.muted, flex: 1, fontSize: 13 },
   vozListening: { color: C.cyan, marginTop: 12, textAlign: 'center' },
@@ -904,25 +908,25 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: C.lime,
     paddingVertical: 14,
-    borderRadius: 14,
+    borderRadius: radius.mdL,
   },
   vozContinueText: { color: colors.primary.text, fontWeight: '900', letterSpacing: 0.5 },
 
   catActions: { flexDirection: 'row', gap: 10, marginBottom: 12 },
   catActionBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, paddingVertical: 12, borderRadius: 12,
+    gap: 8, paddingVertical: 12, borderRadius: radius.md,
     backgroundColor: colors.surface.elevated, borderWidth: 1, borderColor: C.border,
   },
   catActionBtnActive: { borderColor: 'rgba(209,255,38,0.4)', backgroundColor: colors.primary.muted },
   catActionLabel: { fontSize: 13, fontWeight: '700', color: C.muted },
   catForm: {
-    backgroundColor: colors.surface.elevated, borderRadius: 14,
+    backgroundColor: colors.surface.elevated, borderRadius: radius.mdL,
     padding: 12, marginBottom: 12, gap: 8,
     borderWidth: 1, borderColor: C.border,
   },
   catFormInput: {
-    backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: radius.input,
     borderWidth: 1, borderColor: C.border,
     paddingHorizontal: 12, paddingVertical: 10,
     color: C.text, fontSize: 14,
@@ -935,7 +939,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 10,
+    borderRadius: radius.input,
     borderWidth: 1,
     borderColor: C.border,
     paddingVertical: 10,
@@ -944,7 +948,7 @@ const styles = StyleSheet.create({
   catImagePreview: {
     width: 28,
     height: 28,
-    borderRadius: 6,
+    borderRadius: radius.control,
     backgroundColor: colors.surface.base,
   },
   catImagePickerLabel: {
@@ -953,7 +957,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   catSaveBtn: {
-    backgroundColor: C.lime, borderRadius: 10,
+    backgroundColor: C.lime, borderRadius: radius.input,
     paddingVertical: 12, alignItems: 'center', marginTop: 4,
   },
   catSaveBtnText: { color: colors.primary.text, fontWeight: '900', fontSize: 14 },
@@ -962,7 +966,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface.elevated,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: C.border,
     paddingVertical: 12,
@@ -973,14 +977,14 @@ const styles = StyleSheet.create({
   catalogRowThumb: {
     width: 40,
     height: 40,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     backgroundColor: colors.surface.base,
     flexShrink: 0,
   },
   catalogRowThumbPlaceholder: {
     width: 40,
     height: 40,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     backgroundColor: colors.surface.base,
     alignItems: 'center',
     justifyContent: 'center',

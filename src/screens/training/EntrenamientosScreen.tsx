@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTrainingStore } from '../../store/trainingStore';
 import type { TrainingPhase } from '../../types';
 import { AppProgressiveHeader, HEADER_ROW_HEIGHT } from '../../components/AppProgressiveHeader';
+import { radius } from '../../theme/radius';
 
 // Color palette
 const colors = {
@@ -331,7 +332,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#006875',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 4,
+    borderRadius: radius.xs,
   },
   phaseTagText: {
     fontSize: 10,
@@ -355,7 +356,7 @@ const styles = StyleSheet.create({
   progressCard: {
     backgroundColor: colors.elevated,
     padding: 24,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   progressHeader: {
     flexDirection: 'row',
@@ -395,7 +396,7 @@ const styles = StyleSheet.create({
   progressBarBackground: {
     height: 4,
     backgroundColor: colors.surface,
-    borderRadius: 2,
+    borderRadius: radius.xxs,
     overflow: 'hidden',
   },
   progressBar: {
@@ -408,7 +409,7 @@ const styles = StyleSheet.create({
   goalCard: {
     backgroundColor: colors.surface,
     padding: 16,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   goalLabel: {
     fontSize: 10,
@@ -426,7 +427,7 @@ const styles = StyleSheet.create({
   quoteCard: {
     backgroundColor: colors.elevated,
     padding: 16,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   quoteLabel: {
     fontSize: 10,
@@ -464,7 +465,7 @@ const styles = StyleSheet.create({
   },
   emptyBox: {
     backgroundColor: colors.elevated,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     padding: 20,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
@@ -485,7 +486,7 @@ const styles = StyleSheet.create({
   },
   dayCard: {
     backgroundColor: colors.elevated,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     overflow: 'hidden',
     flexDirection: 'row',
   },
@@ -566,7 +567,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderWidth: 1,
     borderColor: 'rgba(72, 72, 71, 0.5)',
-    borderRadius: 4,
+    borderRadius: radius.xs,
     flexShrink: 0,
   },
   dayButtonActive: {

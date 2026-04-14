@@ -17,6 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuthStore } from '../../store/authStore';
 import { uploadAvatar } from '../../services/profileService';
+import { radius } from '../../theme/radius';
 
 type SignUpScreenProps = {
   navigation: NativeStackNavigationProp<any>;
@@ -336,7 +337,7 @@ const styles = StyleSheet.create({
     width: 12,
     height: 2,
     backgroundColor: 'rgba(118, 117, 117, 1)',
-    borderRadius: 1,
+    borderRadius: radius.hairline,
   },
   indicatorActive: {
     backgroundColor: '#c1ed00',
@@ -381,7 +382,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(72, 72, 71, 0.2)',
     paddingVertical: 12,
     gap: 8,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   socialButtonIcon: {
     fontSize: 18,
@@ -422,7 +423,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 16,
-    borderRadius: 2,
+    borderRadius: radius.xxs,
   },
   errorText: {
     color: '#ff7351',
@@ -451,7 +452,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#131313',
     borderBottomWidth: 2,
     borderBottomColor: 'rgba(72, 72, 71, 0.3)',
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   textInput: {
     flex: 1,
@@ -483,7 +484,7 @@ const styles = StyleSheet.create({
     height: 20,
     borderWidth: 2,
     borderColor: 'rgba(72, 72, 71, 0.6)',
-    borderRadius: 4,
+    borderRadius: radius.xs,
     marginTop: 2,
     alignItems: 'center',
     justifyContent: 'center',
@@ -515,7 +516,7 @@ const styles = StyleSheet.create({
   signUpButton: {
     backgroundColor: '#cefc22',
     paddingVertical: 16,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     alignItems: 'center',
     marginTop: 8,
     shadowColor: '#cefc22',
@@ -561,20 +562,20 @@ const styles = StyleSheet.create({
   avatarPicker: {
     width: 80,
     height: 80,
-    borderRadius: 40,
+    borderRadius: radius.roundAvatar,
     position: 'relative',
   },
   avatarPreview: {
     width: 80,
     height: 80,
-    borderRadius: 40,
+    borderRadius: radius.roundAvatar,
     borderWidth: 2,
     borderColor: 'rgba(209,255,38,0.4)',
   },
   avatarPlaceholder: {
     width: 80,
     height: 80,
-    borderRadius: 40,
+    borderRadius: radius.roundAvatar,
     backgroundColor: '#131313',
     borderWidth: 2,
     borderColor: 'rgba(72,72,71,0.4)',
@@ -588,7 +589,7 @@ const styles = StyleSheet.create({
     right: 2,
     width: 26,
     height: 26,
-    borderRadius: 13,
+    borderRadius: radius.mdTight,
     backgroundColor: '#D1FF26',
     justifyContent: 'center',
     alignItems: 'center',

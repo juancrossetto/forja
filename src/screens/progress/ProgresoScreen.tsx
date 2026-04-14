@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useProgressStore } from '../../store/progressStore';
 import { useAuthStore } from '../../store/authStore';
 import { AppProgressiveHeader, HEADER_ROW_HEIGHT } from '../../components/AppProgressiveHeader';
+import { radius } from '../../theme/radius';
 
 const { width } = Dimensions.get('window');
 const CARD_PADDING = 16;
@@ -454,7 +455,7 @@ const gb = StyleSheet.create({
   iconWrap: {
     width: 28,
     height: 28,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -480,12 +481,12 @@ const gb = StyleSheet.create({
   track: {
     height: 4,
     backgroundColor: '#2a2a2a',
-    borderRadius: 2,
+    borderRadius: radius.xxs,
     overflow: 'hidden',
   },
   fill: {
     height: '100%',
-    borderRadius: 2,
+    borderRadius: radius.xxs,
   },
 });
 
@@ -524,7 +525,7 @@ const s = StyleSheet.create({
   },
   card: {
     backgroundColor: C.surface,
-    borderRadius: 14,
+    borderRadius: radius.mdL,
     padding: 16,
   },
   cardTappable: {
@@ -560,7 +561,7 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    borderRadius: 6,
+    borderRadius: radius.control,
     paddingHorizontal: 10,
     paddingVertical: 5,
     backgroundColor: C.primary,
@@ -599,8 +600,8 @@ const s = StyleSheet.create({
   sparkBar: {
     flex: 1,
     backgroundColor: C.primaryDim,
-    borderTopLeftRadius: 3,
-    borderTopRightRadius: 3,
+    borderTopLeftRadius: radius.xsTight,
+    borderTopRightRadius: radius.xsTight,
   },
 
   // Goals empty state
@@ -631,7 +632,7 @@ const s = StyleSheet.create({
   // Goals card
   todayBadge: {
     backgroundColor: C.surfaceHigh,
-    borderRadius: 4,
+    borderRadius: radius.xs,
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
@@ -662,20 +663,20 @@ const s = StyleSheet.create({
   stepsTrack: {
     height: 3,
     backgroundColor: '#2a2a2a',
-    borderRadius: 2,
+    borderRadius: radius.xxs,
     overflow: 'hidden',
     marginTop: 8,
   },
   stepsFill: {
     height: '100%',
     backgroundColor: C.secondary,
-    borderRadius: 2,
+    borderRadius: radius.xxs,
   },
 
   // Source badge
   sourceBadge: {
     backgroundColor: 'rgba(0,227,253,0.12)',
-    borderRadius: 4,
+    borderRadius: radius.xs,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
@@ -760,7 +761,7 @@ const s = StyleSheet.create({
   navBtn: {
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: radius.lg,
     backgroundColor: C.surface,
     justifyContent: 'center',
     alignItems: 'center',
@@ -779,7 +780,7 @@ const s = StyleSheet.create({
   photoTab: {
     paddingHorizontal: 14,
     paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: radius.xl,
     backgroundColor: C.surface,
   },
   photoTabActive: {
@@ -797,7 +798,7 @@ const s = StyleSheet.create({
   photoPlaceholder: {
     height: 260,
     backgroundColor: C.surface,
-    borderRadius: 14,
+    borderRadius: radius.mdL,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 14,
@@ -811,7 +812,7 @@ const s = StyleSheet.create({
   addPhotoBtn: {
     paddingHorizontal: 20,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     backgroundColor: C.surfaceHigh,
   },
   addPhotoBtnText: {
@@ -827,7 +828,7 @@ const s = StyleSheet.create({
     right: 16,
     height: 52,
     paddingHorizontal: 24,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     backgroundColor: C.primary,
     justifyContent: 'center',
     alignItems: 'center',
@@ -854,7 +855,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     backgroundColor: '#1a1400',
-    borderRadius: 8,
+    borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: '#3a3000',
   },

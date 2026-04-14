@@ -28,6 +28,7 @@ import { syncAllGoalsForDate } from '../../services/goalProgressService';
 import { registerForPushNotifications } from '../../services/pushNotificationService';
 import { startStepTracking, stopStepTracking, syncStepsToGoal } from '../../services/stepCounterService';
 import { toLocalISODate } from '../../utils/dateUtils';
+import { radius } from '../../theme/radius';
 
 type Nav = NativeStackNavigationProp<HomeStackParamList>;
 
@@ -638,14 +639,14 @@ const styles = StyleSheet.create({
   avatarImage: {
     width: 40,
     height: 40,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: 'rgba(209,255,38,0.4)',
   },
   avatarPlaceholder: {
     width: 40,
     height: 40,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     backgroundColor: COLORS.surfaceHighest,
     borderWidth: 1,
     borderColor: COLORS.primary,
@@ -681,7 +682,7 @@ const styles = StyleSheet.create({
   calendarMiniBtn: {
     width: 22,
     height: 22,
-    borderRadius: 7,
+    borderRadius: radius.avatarTight,
     backgroundColor: COLORS.surfaceHigh,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
@@ -693,7 +694,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 2,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: 'transparent',
   },
@@ -722,7 +723,7 @@ const styles = StyleSheet.create({
   dayDot: {
     width: 4,
     height: 4,
-    borderRadius: 2,
+    borderRadius: radius.xxs,
     marginTop: 6,
     backgroundColor: 'transparent',
   },
@@ -731,7 +732,7 @@ const styles = StyleSheet.create({
   },
   trainingCard: {
     height: 192,
-    borderRadius: 12,
+    borderRadius: radius.md,
     marginBottom: 24,
     overflow: 'hidden',
     borderWidth: 1,
@@ -788,7 +789,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 20,
     backgroundColor: COLORS.surfaceLow,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
     alignItems: 'center',
@@ -816,7 +817,7 @@ const styles = StyleSheet.create({
   // Session Card
   sessionCard: {
     backgroundColor: COLORS.surface,
-    borderRadius: 16,
+    borderRadius: radius.lg,
     padding: 20,
     marginBottom: 16,
     borderWidth: 1,
@@ -836,14 +837,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(209,255,38,0.15)',
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 20,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: 'rgba(209,255,38,0.3)',
   },
   sessionLiveDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
+    borderRadius: radius.xsTight,
     backgroundColor: COLORS.primary,
   },
   sessionLiveText: {
@@ -879,7 +880,7 @@ const styles = StyleSheet.create({
   sessionCoachAvatar: {
     width: 26,
     height: 26,
-    borderRadius: 6,
+    borderRadius: radius.control,
     backgroundColor: COLORS.surfaceHighest,
     justifyContent: 'center',
     alignItems: 'center',
@@ -892,7 +893,7 @@ const styles = StyleSheet.create({
   sessionDividerDot: {
     width: 3,
     height: 3,
-    borderRadius: 2,
+    borderRadius: radius.xxs,
     backgroundColor: COLORS.textTertiary,
   },
   sessionDescription: {
@@ -908,7 +909,7 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: COLORS.primary,
     paddingVertical: 13,
-    borderRadius: 10,
+    borderRadius: radius.input,
   },
   sessionCTAText: {
     fontSize: 11,
@@ -920,7 +921,7 @@ const styles = StyleSheet.create({
   // Goals Section
   goalsSection: {
     backgroundColor: COLORS.surfaceLow,
-    borderRadius: 16,
+    borderRadius: radius.lg,
     padding: 20,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
@@ -969,7 +970,7 @@ const styles = StyleSheet.create({
   goalsRing: {
     width: 48,
     height: 48,
-    borderRadius: 24,
+    borderRadius: radius.xxl,
     borderWidth: 2,
     borderColor: COLORS.primary,
     justifyContent: 'center',
@@ -984,14 +985,14 @@ const styles = StyleSheet.create({
   goalsProgressBarBg: {
     height: 3,
     backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 2,
+    borderRadius: radius.xxs,
     marginBottom: 20,
     overflow: 'hidden',
   },
   goalsProgressBarFill: {
     height: 3,
     backgroundColor: COLORS.primary,
-    borderRadius: 2,
+    borderRadius: radius.xxs,
   },
   goalsLoadingContainer: {
     paddingVertical: 20,
@@ -1006,7 +1007,7 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 9,
     paddingHorizontal: 10,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     backgroundColor: 'rgba(255,255,255,0.02)',
   },
   goalItemDone: {
@@ -1015,7 +1016,7 @@ const styles = StyleSheet.create({
   goalStatusIcon: {
     width: 22,
     height: 22,
-    borderRadius: 11,
+    borderRadius: radius.chip,
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
@@ -1029,7 +1030,7 @@ const styles = StyleSheet.create({
   goalStatusPending: {
     width: 6,
     height: 6,
-    borderRadius: 3,
+    borderRadius: radius.xsTight,
     backgroundColor: 'rgba(255,255,255,0.2)',
   },
   goalText: {
@@ -1055,13 +1056,13 @@ const styles = StyleSheet.create({
   goalProgressBarBgSmall: {
     flex: 1,
     height: 4,
-    borderRadius: 2,
+    borderRadius: radius.xxs,
     backgroundColor: 'rgba(255,255,255,0.06)',
     overflow: 'hidden',
   },
   goalProgressBarFillSmall: {
     height: '100%',
-    borderRadius: 2,
+    borderRadius: radius.xxs,
     backgroundColor: COLORS.primary,
   },
   goalProgressLabel: {
@@ -1080,7 +1081,7 @@ const styles = StyleSheet.create({
   pickerContainer: {
     width: SCREEN_WIDTH - 48,
     backgroundColor: COLORS.surface,
-    borderRadius: 16,
+    borderRadius: radius.lg,
     padding: 20,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
@@ -1120,7 +1121,7 @@ const styles = StyleSheet.create({
   },
   pickerDayCellActive: {
     backgroundColor: COLORS.primary,
-    borderRadius: 20,
+    borderRadius: radius.xl,
   },
   pickerDayText: {
     fontSize: 14,

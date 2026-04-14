@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, View, Text, ViewStyle } from 'react-native';
+import { radius } from '../../theme/radius';
 
 interface TagProps {
   label: string;
@@ -75,7 +76,7 @@ const styles = StyleSheet.create({
   tag: {
     paddingHorizontal: 12,
     paddingVertical: 4,
-    borderRadius: 999,
+    borderRadius: radius.full,
     justifyContent: 'center',
     alignItems: 'center',
     alignSelf: 'flex-start',

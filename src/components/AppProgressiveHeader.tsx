@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -9,6 +9,9 @@ import {
   Platform,
   Alert,
   Linking,
+  Modal,
+  TouchableWithoutFeedback,
+  Dimensions,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -17,12 +20,19 @@ import {
   getHealthStatus,
   requestHealthPermissions,
 } from '../services/healthService';
+import { getRegisteredStreak, getTrophyUrl, type StreakInfo } from '../services/streakService';
+import { radius } from '../theme/radius';
 
 /** Height of the icon row (status-bar / notch area NOT included). */
 export const HEADER_ROW_HEIGHT = 62;
 
 const DIM     = 'rgba(255,255,255,0.22)';
 const PRIMARY = '#D1FF26';
+const PRIMARY_CONTAINER = '#DAF900';
+const SURFACE_HIGH = '#1F1F1F';
+const SURFACE_HIGHEST = '#262626';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface AppProgressiveHeaderProps {
   scrollY: Animated.Value;
@@ -44,14 +54,45 @@ export const AppProgressiveHeader: React.FC<AppProgressiveHeaderProps> = ({
 
   const avatarInitial = (user?.name?.[0] ?? user?.email?.[0] ?? 'U').toUpperCase();
 
-  // ── Check health permission on startup (no network — reads local perm state) ──
+  // ── Streak ─────────────────────────────────────────────────────────────────
+  // getPublicUrl es síncrono — no necesita estado
+  const trophyUri = getTrophyUrl();
+
+  const [streak, setStreak] = useState<StreakInfo>({ current: 0, best: 0 });
+  const [cardVisible, setCardVisible] = useState(false);
+  const cardAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    getRegisteredStreak().then(setStreak).catch(() => {});
+  }, []);
+
+  const showCard = () => {
+    setCardVisible(true);
+    Animated.spring(cardAnim, {
+      toValue: 1,
+      damping: 20,
+      stiffness: 260,
+      mass: 0.7,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const hideCard = () => {
+    Animated.timing(cardAnim, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => setCardVisible(false));
+  };
+
+  // ── Health permission checks ────────────────────────────────────────────────
   useEffect(() => {
     getHealthStatus().then((status) => {
       setWatchConnected(status.permissions.steps === 'granted');
     });
   }, [setWatchConnected]);
 
-  // ── Animations ─────────────────────────────────────────────────────────────
+  // ── Scroll animations ─────────────────────────────────────────────────────
   const glassFade = scrollY.interpolate({
     inputRange: [0, 64], outputRange: [0, 1], extrapolate: 'clamp',
   });
@@ -59,8 +100,6 @@ export const AppProgressiveHeader: React.FC<AppProgressiveHeaderProps> = ({
     inputRange: [48, 80], outputRange: [0, 1], extrapolate: 'clamp',
   });
 
-  // Monta el glass solo cuando hay scroll real — evita que BlurView (UIVisualEffectView
-  // en iOS) renderice su material nativo aunque el Animated.View padre tenga opacity:0.
   const [glassActive, setGlassActive] = useState(false);
   useEffect(() => {
     const id = scrollY.addListener(({ value }) => {
@@ -102,7 +141,6 @@ export const AppProgressiveHeader: React.FC<AppProgressiveHeaderProps> = ({
       return;
     }
 
-    // Permission denied (ya fue rechazado antes — iOS no vuelve a preguntar)
     Alert.alert(
       'Permiso de salud requerido',
       'Para sincronizar tus pasos y actividad, habilitá el acceso en:\n\nAjustes → Privacidad y seguridad → Movimiento y actividad física → Método R3SET',
@@ -129,98 +167,167 @@ export const AppProgressiveHeader: React.FC<AppProgressiveHeaderProps> = ({
     );
   };
 
+  // ── Floating streak card ───────────────────────────────────────────────────
+  const cardTranslateY = cardAnim.interpolate({
+    inputRange: [0, 1], outputRange: [-12, 0],
+  });
+  const cardOpacity = cardAnim.interpolate({
+    inputRange: [0, 1], outputRange: [0, 1],
+  });
+
   return (
-    <View
-      style={[styles.root, { height: totalHeight }]}
-      pointerEvents="box-none"
-    >
-      {/* Glass background — solo se monta cuando hay scroll activo */}
-      {glassActive ? (
+    <>
+      <View
+        style={[styles.root, { height: totalHeight }]}
+        pointerEvents="box-none"
+      >
+        {/* Glass background */}
+        {glassActive ? (
+          <Animated.View
+            style={[StyleSheet.absoluteFill, { opacity: glassFade }]}
+            pointerEvents="none"
+          >
+            {Platform.OS === 'web' ? (
+              <View style={[StyleSheet.absoluteFill, styles.webBlurFill]} />
+            ) : (
+              <BlurView intensity={78} tint="dark" style={StyleSheet.absoluteFill} />
+            )}
+            <View style={[StyleSheet.absoluteFill, styles.glassDark]} />
+          </Animated.View>
+        ) : null}
+
+        {/* Bottom hairline */}
         <Animated.View
-          style={[StyleSheet.absoluteFill, { opacity: glassFade }]}
+          style={[styles.separator, { opacity: separatorFade }]}
           pointerEvents="none"
-        >
-          {Platform.OS === 'web' ? (
-            <View style={[StyleSheet.absoluteFill, styles.webBlurFill]} />
-          ) : (
-            <BlurView intensity={78} tint="dark" style={StyleSheet.absoluteFill} />
-          )}
-          <View style={[StyleSheet.absoluteFill, styles.glassDark]} />
-        </Animated.View>
-      ) : null}
+        />
 
-      {/* Bottom hairline */}
-      <Animated.View
-        style={[styles.separator, { opacity: separatorFade }]}
-        pointerEvents="none"
-      />
+        {/* ── Icon row ──────────────────────────────────────────────────────── */}
+        <View style={[styles.row, { paddingTop: topInset }]}>
 
-      {/* ── Icon row ──────────────────────────────────────────────────────── */}
-      <View style={[styles.row, { paddingTop: topInset }]}>
-
-        {/* LEFT — home */}
-        <TouchableOpacity
-          style={styles.pill}
-          onPress={onHomePress}
-          activeOpacity={0.68}
-          hitSlop={HIT}
-        >
-          <Ionicons name="home-outline" size={20} color="rgba(255,255,255,0.88)" />
-        </TouchableOpacity>
-
-        {/* CENTER — devices (each icon independently tappable) */}
-        <View style={styles.devicesPill}>
+          {/* LEFT — home */}
           <TouchableOpacity
-            onPress={handleWatchPress}
-            activeOpacity={0.65}
-            hitSlop={HIT_SM}
+            style={styles.pill}
+            onPress={onHomePress}
+            activeOpacity={0.68}
+            hitSlop={HIT}
           >
-            <MaterialCommunityIcons
-              name="watch"
-              size={16}
-              color={watchConnected ? PRIMARY : DIM}
-            />
+            <Ionicons name="home-outline" size={20} color="rgba(255,255,255,0.88)" />
           </TouchableOpacity>
 
-          <View style={styles.deviceDivider} />
+          {/* CENTER — devices */}
+          <View style={styles.devicesPill}>
+            <TouchableOpacity onPress={handleWatchPress} activeOpacity={0.65} hitSlop={HIT_SM}>
+              <MaterialCommunityIcons
+                name="watch"
+                size={16}
+                color={watchConnected ? PRIMARY : DIM}
+              />
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={handleGarminPress}
-            activeOpacity={0.65}
-            hitSlop={HIT_SM}
-          >
-            <MaterialCommunityIcons name="navigation" size={16} color={DIM} />
-          </TouchableOpacity>
+            <View style={styles.deviceDivider} />
 
-          <View style={styles.deviceDivider} />
+            <TouchableOpacity onPress={handleGarminPress} activeOpacity={0.65} hitSlop={HIT_SM}>
+              <MaterialCommunityIcons name="navigation" size={16} color={DIM} />
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={handleFitbitPress}
-            activeOpacity={0.65}
-            hitSlop={HIT_SM}
-          >
-            <MaterialCommunityIcons name="heart-pulse" size={16} color={DIM} />
-          </TouchableOpacity>
+            <View style={styles.deviceDivider} />
+
+            <TouchableOpacity onPress={handleFitbitPress} activeOpacity={0.65} hitSlop={HIT_SM}>
+              <MaterialCommunityIcons name="heart-pulse" size={16} color={DIM} />
+            </TouchableOpacity>
+          </View>
+
+          {/* RIGHT — streak + avatar unified pill */}
+          <View style={styles.unifiedPill}>
+            {/* Streak: count + trophy */}
+            <TouchableOpacity
+              style={styles.streakSection}
+              onPress={showCard}
+              activeOpacity={0.72}
+              hitSlop={HIT}
+            >
+              <Text style={styles.streakCount}>{streak.current}</Text>
+              {trophyUri ? (
+                <Image source={{ uri: trophyUri }} style={styles.trophyImg} />
+              ) : (
+                <MaterialCommunityIcons name="trophy" size={20} color={PRIMARY} />
+              )}
+            </TouchableOpacity>
+
+            {/* Divider */}
+            <View style={styles.pillDivider} />
+
+            {/* Avatar */}
+            <TouchableOpacity
+              style={styles.avatarSection}
+              onPress={onAvatarPress}
+              activeOpacity={0.72}
+            >
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.avatarImg} />
+              ) : (
+                <View style={styles.avatarFallback}>
+                  <Text style={styles.avatarInitial}>{avatarInitial}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+
         </View>
-
-        {/* RIGHT — avatar */}
-        <TouchableOpacity
-          style={styles.avatarPill}
-          onPress={onAvatarPress}
-          activeOpacity={0.72}
-          hitSlop={HIT}
-        >
-          {avatarUrl ? (
-            <Image source={{ uri: avatarUrl }} style={styles.avatarImg} />
-          ) : (
-            <View style={styles.avatarFallback}>
-              <Text style={styles.avatarInitial}>{avatarInitial}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-
       </View>
-    </View>
+
+      {/* ── Floating streak card ─────────────────────────────────────────────── */}
+      <Modal
+        visible={cardVisible}
+        transparent
+        animationType="none"
+        statusBarTranslucent
+        onRequestClose={hideCard}
+      >
+        <TouchableWithoutFeedback onPress={hideCard}>
+          <View style={styles.cardBackdrop}>
+            <TouchableWithoutFeedback>
+              <Animated.View
+                style={[
+                  styles.streakCard,
+                  { top: totalHeight + 8 },
+                  { opacity: cardOpacity, transform: [{ translateY: cardTranslateY }] },
+                ]}
+              >
+                {/* Trophy icon from storage */}
+                <Image
+                  source={{ uri: trophyUri }}
+                  style={styles.cardTrophyImg}
+                  resizeMode="contain"
+                />
+
+                <Text style={styles.cardTitle}>DÍAS REGISTRADOS</Text>
+
+                {/* Current streak number */}
+                <Text style={styles.cardNumber}>{streak.current}</Text>
+                <Text style={styles.cardSubtitle}>racha actual</Text>
+
+                {/* Divider */}
+                <View style={styles.cardDivider} />
+
+                {/* Best streak */}
+                <View style={styles.cardBestRow}>
+                  <MaterialCommunityIcons
+                    name="trophy-outline"
+                    size={14}
+                    color={PRIMARY_CONTAINER}
+                  />
+                  <Text style={styles.cardBestText}>
+                    Mejor: <Text style={styles.cardBestValue}>{streak.best}</Text>
+                  </Text>
+                </View>
+              </Animated.View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+    </>
   );
 };
 
@@ -229,7 +336,7 @@ const HIT_SM = { top: 8,  bottom: 8,  left: 6,  right: 6  } as const;
 
 const PILL_BASE = {
   height: 40,
-  borderRadius: 10,
+  borderRadius: radius.input,
   backgroundColor: 'rgba(255, 255, 255, 0.07)',
   borderWidth: 1,
   borderColor: 'rgba(255, 255, 255, 0.09)',
@@ -285,18 +392,127 @@ const styles = StyleSheet.create({
     marginHorizontal: 2,
   },
 
-  avatarPill: {
+  // ── Unified streak + avatar pill ──────────────────────────────────────────
+  unifiedPill: {
     ...PILL_BASE,
-    width: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderColor: 'rgba(209, 255, 38, 0.35)',
+    paddingHorizontal: 0,
+    overflow: 'hidden',
+  },
+
+  streakSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  streakCount: {
+    fontFamily: 'Inter',
+    fontSize: 14,
+    fontWeight: '900',
+    color: PRIMARY,
+    lineHeight: 18,
+  },
+  trophyImg: {
+    width: 26,
+    height: 26,
+    resizeMode: 'contain',
+  },
+
+  pillDivider: {
+    width: 1,
+    height: 22,
+    backgroundColor: 'rgba(209, 255, 38, 0.20)',
+  },
+
+  avatarSection: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     justifyContent: 'center',
     alignItems: 'center',
-    borderColor: 'rgba(209, 255, 38, 0.45)',
   },
-  avatarImg: { width: 30, height: 30, borderRadius: 7 },
+  avatarImg: { width: 30, height: 30, borderRadius: radius.avatarTight },
   avatarFallback: {
-    width: 30, height: 30, borderRadius: 7,
+    width: 30, height: 30, borderRadius: radius.avatarTight,
     backgroundColor: '#1a1a1a',
     justifyContent: 'center', alignItems: 'center',
   },
-  avatarInitial: { fontSize: 13, fontWeight: '700', color: '#D1FF26' },
+  avatarInitial: { fontSize: 13, fontWeight: '700', color: PRIMARY },
+
+  // ── Floating card ─────────────────────────────────────────────────────────
+  cardBackdrop: {
+    flex: 1,
+  },
+  streakCard: {
+    position: 'absolute',
+    right: 20,
+    width: 180,
+    backgroundColor: SURFACE_HIGH,
+    borderRadius: radius.surface.card,
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(218,249,0,0.12)',
+    shadowColor: PRIMARY_CONTAINER,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 16,
+  },
+
+  cardTrophyImg: {
+    width: 72,
+    height: 72,
+    marginBottom: 12,
+  },
+  cardTitle: {
+    fontFamily: 'Inter',
+    fontSize: 9,
+    fontWeight: '800',
+    color: 'rgba(255,255,255,0.45)',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  cardNumber: {
+    fontFamily: 'Space Grotesk',
+    fontSize: 52,
+    fontWeight: '900',
+    color: PRIMARY,
+    lineHeight: 56,
+    letterSpacing: -2,
+  },
+  cardSubtitle: {
+    fontFamily: 'Inter',
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.45)',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  cardDivider: {
+    width: '100%',
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    marginBottom: 14,
+  },
+  cardBestRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  cardBestText: {
+    fontFamily: 'Inter',
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.50)',
+  },
+  cardBestValue: {
+    color: PRIMARY_CONTAINER,
+    fontWeight: '800',
+  },
 });

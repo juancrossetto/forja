@@ -22,6 +22,7 @@ import {
   getMeasurementHistory,
   type BodyMeasurement,
 } from '../../services/measurementsService';
+import { radius } from '../../theme/radius';
 
 const { width } = Dimensions.get('window');
 const H_PAD = 24;
@@ -513,12 +514,12 @@ const styles = StyleSheet.create({
     borderBottomColor: C.border,
   },
   headerBtn: {
-    width: 36, height: 36, borderRadius: 10,
+    width: 36, height: 36, borderRadius: radius.input,
     backgroundColor: C.primary,
     justifyContent: 'center', alignItems: 'center',
   },
   headerBtnGhost: {
-    width: 36, height: 36, borderRadius: 10,
+    width: 36, height: 36, borderRadius: radius.input,
     backgroundColor: C.surfaceTop,
     justifyContent: 'center', alignItems: 'center',
   },
@@ -547,7 +548,7 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   sectionAccent: {
-    width: 3, height: 18, backgroundColor: C.primaryDim, borderRadius: 2,
+    width: 3, height: 18, backgroundColor: C.primaryDim, borderRadius: radius.xxs,
   },
 
   // Eyebrow
@@ -581,7 +582,7 @@ const styles = StyleSheet.create({
   },
   bentoCard: {
     flex: 1, backgroundColor: C.surface,
-    borderRadius: 12, padding: 14,
+    borderRadius: radius.md, padding: 14,
     borderLeftWidth: 2, borderLeftColor: C.mutedLo,
   },
   bentoCardAccent: {
@@ -608,7 +609,7 @@ const styles = StyleSheet.create({
   },
   rangeTab: {
     paddingHorizontal: 14, paddingVertical: 8,
-    borderRadius: 20, backgroundColor: C.surfaceTop,
+    borderRadius: radius.xl, backgroundColor: C.surfaceTop,
   },
   rangeTabActive: { backgroundColor: C.primaryDim },
   rangeTabText: {
@@ -621,7 +622,7 @@ const styles = StyleSheet.create({
   chartBox: {
     height: CHART_H,
     backgroundColor: C.surface,
-    borderRadius: 16, overflow: 'hidden',
+    borderRadius: radius.lg, overflow: 'hidden',
     marginBottom: 8,
   },
   chartTooltip: {
@@ -633,7 +634,7 @@ const styles = StyleSheet.create({
     color: C.primaryDim, letterSpacing: 1.5,
     backgroundColor: 'rgba(193,237,0,0.1)',
     paddingHorizontal: 6, paddingVertical: 2,
-    borderRadius: 4, marginBottom: 2,
+    borderRadius: radius.xs, marginBottom: 2,
   },
   tooltipValue: {
     fontSize: 16, fontWeight: '800',
@@ -661,7 +662,7 @@ const styles = StyleSheet.create({
   // Analysis
   analysisCard: {
     backgroundColor: C.surface,
-    borderRadius: 14, padding: 20, gap: 14,
+    borderRadius: radius.mdL, padding: 20, gap: 14,
   },
   analysisText: {
     fontSize: 13, color: C.muted,
@@ -670,7 +671,7 @@ const styles = StyleSheet.create({
   consistencyBox: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: 'rgba(0,227,253,0.08)',
-    borderRadius: 10, padding: 12,
+    borderRadius: radius.input, padding: 12,
     borderWidth: 1, borderColor: 'rgba(0,227,253,0.12)',
   },
   consistencyText: {
@@ -682,7 +683,7 @@ const styles = StyleSheet.create({
   recordsList: { gap: 8, marginTop: 16 },
   recordRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: C.surface, borderRadius: 12,
+    backgroundColor: C.surface, borderRadius: radius.md,
     paddingHorizontal: 16, paddingVertical: 14,
   },
   recordWeight: {

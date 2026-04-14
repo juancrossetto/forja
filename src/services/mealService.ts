@@ -46,6 +46,8 @@ export interface MealLog {
   protein_g?: number | null;
   carbs_g?: number | null;
   fat_g?: number | null;
+  /** Si false, el ítem sigue en el plan pero no suma kcal/macros (default true en DB). */
+  is_included?: boolean | null;
 }
 
 async function getUserId(): Promise<string | null> {
@@ -258,6 +260,29 @@ export async function updateMealLog(id: string, payload: {
   return true;
 }
 
+/** Incluir o excluir un registro del cómputo de kcal/macros del día (sincroniza meta comidas). */
+export async function setMealLogIncluded(
+  id: string,
+  isIncluded: boolean,
+  dateForGoalSync: string,
+): Promise<boolean> {
+  const userId = await getUserId();
+  if (!userId) return false;
+
+  const { error } = await supabase
+    .from('meal_logs')
+    .update({ is_included: isIncluded, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('user_id', userId);
+
+  if (error) {
+    console.error('setMealLogIncluded:', error.message);
+    return false;
+  }
+  syncMealsGoal(dateForGoalSync).catch(() => {});
+  return true;
+}
+
 /** Fetch meal logs for a specific date. */
 export async function getMealsForDate(date: string = todayISO()): Promise<MealLog[]> {
   const userId = await getUserId();
@@ -331,6 +356,7 @@ export async function restoreMealLog(snapshot: MealLog): Promise<MealLog | null>
     protein_g: snapshot.protein_g ?? null,
     carbs_g: snapshot.carbs_g ?? null,
     fat_g: snapshot.fat_g ?? null,
+    is_included: snapshot.is_included ?? true,
   };
 
   const { data, error } = await supabase.from('meal_logs').insert(row).select('*').single();

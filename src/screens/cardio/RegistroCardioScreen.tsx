@@ -19,6 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 
 import { saveCardioLog, type CardioActivityId } from '../../services/workoutService';
+import { radius } from '../../theme/radius';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const H_PAD = 24;
@@ -370,7 +371,7 @@ const styles = StyleSheet.create({
   activityTile: {
     width: TILE_W,
     aspectRatio: 1,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     backgroundColor: COLORS.surface,
     alignItems: 'center',
     justifyContent: 'center',
@@ -407,7 +408,7 @@ const styles = StyleSheet.create({
   unitSwitch: {
     flexDirection: 'row',
     backgroundColor: COLORS.surface,
-    borderRadius: 999,
+    borderRadius: radius.full,
     padding: 4,
     borderWidth: 1,
     borderColor: 'rgba(72,72,71,0.4)',
@@ -415,7 +416,7 @@ const styles = StyleSheet.create({
   unitChip: {
     paddingHorizontal: 14,
     paddingVertical: 6,
-    borderRadius: 999,
+    borderRadius: radius.full,
   },
   unitChipOn: {
     backgroundColor: COLORS.primaryContainer,
@@ -456,7 +457,7 @@ const styles = StyleSheet.create({
   timeBox: {
     flex: 1,
     backgroundColor: COLORS.surfaceLow,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     padding: 14,
     alignItems: 'center',
   },
@@ -491,7 +492,7 @@ const styles = StyleSheet.create({
   },
   sliderTrack: {
     height: 6,
-    borderRadius: 999,
+    borderRadius: radius.full,
     backgroundColor: COLORS.surfaceHighest,
     marginTop: 8,
     position: 'relative',
@@ -503,13 +504,13 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     backgroundColor: COLORS.secondary,
-    borderRadius: 999,
+    borderRadius: radius.full,
   },
   sliderThumb: {
     position: 'absolute',
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: radius.input,
     backgroundColor: COLORS.secondary,
     marginLeft: -10,
     top: -7,
@@ -536,7 +537,7 @@ const styles = StyleSheet.create({
   },
   hero: {
     height: 180,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     overflow: 'hidden',
     marginTop: 8,
   },
@@ -566,7 +567,7 @@ const styles = StyleSheet.create({
   },
   saveBtn: {
     height: 56,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     backgroundColor: COLORS.primary,
     flexDirection: 'row',
     alignItems: 'center',

@@ -11,6 +11,7 @@ import { useNavigation, useNavigationState } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTrainingStore } from '../store/trainingStore';
 import { colors } from '../theme/colors';
+import { radius } from '../theme/radius';
 
 const PRIMARY = colors.primary.default;
 const TAB_BAR_CONTENT_HEIGHT = 60;
@@ -111,7 +112,7 @@ const styles = StyleSheet.create({
   banner: {
     height: 42,
     backgroundColor: PRIMARY,
-    borderRadius: 12,
+    borderRadius: radius.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -129,7 +130,7 @@ const styles = StyleSheet.create({
   },
   rim: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.12)',
     pointerEvents: 'none',
@@ -150,7 +151,7 @@ const styles = StyleSheet.create({
   pulseDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
+    borderRadius: radius.xsTight,
     backgroundColor: colors.primary.text,
     opacity: 0.55,
   },
@@ -188,7 +189,7 @@ const styles = StyleSheet.create({
   chevronWrap: {
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: radius.input,
     backgroundColor: 'rgba(0,0,0,0.1)',
     justifyContent: 'center',
     alignItems: 'center',

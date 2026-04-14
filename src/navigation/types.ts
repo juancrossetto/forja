@@ -58,6 +58,7 @@ export type MainTabParamList = {
 
 // Home Stack Types (for Home navigation from Home tab)
 export type HomeStackParamList = {
+  Comunidad: undefined;
   Inicio: undefined;
   Metas: undefined;
   Perfil: undefined;

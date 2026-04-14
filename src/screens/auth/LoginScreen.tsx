@@ -15,6 +15,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuthStore } from '../../store/authStore';
 import { useGoogleAuth } from '../../lib/auth/googleAuth';
 import { signInWithApple, isAppleAuthAvailable } from '../../lib/auth/appleAuth';
+import { radius } from '../../theme/radius';
 
 type LoginScreenProps = {
   navigation: NativeStackNavigationProp<any>;
@@ -362,7 +363,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.08)',
     paddingVertical: 14,
     gap: 8,
-    borderRadius: 10,
+    borderRadius: radius.input,
   },
   socialButtonDisabled: {
     opacity: 0.4,
@@ -401,7 +402,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 16,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   errorText: {
     color: '#ff7351',
@@ -428,7 +429,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#131313',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.07)',
-    borderRadius: 10,
+    borderRadius: radius.input,
     color: '#FFFFFF',
     paddingHorizontal: 16,
     paddingVertical: 13,
@@ -446,7 +447,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#131313',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.07)',
-    borderRadius: 10,
+    borderRadius: radius.input,
   },
   passwordTextInput: {
     flex: 1,
@@ -471,7 +472,7 @@ const styles = StyleSheet.create({
   loginButton: {
     backgroundColor: '#D1FF26',
     paddingVertical: 16,
-    borderRadius: 10,
+    borderRadius: radius.input,
     alignItems: 'center',
     marginTop: 8,
     shadowColor: '#D1FF26',
@@ -527,7 +528,7 @@ const styles = StyleSheet.create({
     height: 18,
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 4,
+    borderRadius: radius.xs,
     alignItems: 'center',
     justifyContent: 'center',
   },

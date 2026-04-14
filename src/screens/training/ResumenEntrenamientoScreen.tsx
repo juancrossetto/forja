@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { finishActiveSession, saveWorkoutLog } from '../../services/workoutService';
 import { colors } from '../../theme/colors';
 import { spacing, borderRadius } from '../../theme/spacing';
+import { radius } from '../../theme/radius';
 
 const PERSIST_DELAY_MS = 2000;
 
@@ -384,7 +385,7 @@ const styles = StyleSheet.create({
   topBarBtn: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: radius.xl,
     backgroundColor: 'rgba(255,255,255,0.06)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -428,7 +429,7 @@ const styles = StyleSheet.create({
   heroIconRing: {
     width: 104,
     height: 104,
-    borderRadius: 52,
+    borderRadius: radius.circle52,
     padding: 3,
     justifyContent: 'center',
     alignItems: 'center',
@@ -436,7 +437,7 @@ const styles = StyleSheet.create({
   heroIconInner: {
     flex: 1,
     width: '100%',
-    borderRadius: 50,
+    borderRadius: radius.circle50,
     backgroundColor: C.bg,
     alignItems: 'center',
     justifyContent: 'center',
@@ -532,14 +533,14 @@ const styles = StyleSheet.create({
   },
   progressTrack: {
     height: 8,
-    borderRadius: 4,
+    borderRadius: radius.xs,
     backgroundColor: 'rgba(255,255,255,0.06)',
     overflow: 'hidden',
     marginBottom: spacing.md,
   },
   progressFill: {
     height: '100%',
-    borderRadius: 4,
+    borderRadius: radius.xs,
   },
   cardFoot: {
     fontSize: 13,

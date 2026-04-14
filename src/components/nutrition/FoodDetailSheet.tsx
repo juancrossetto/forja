@@ -19,11 +19,15 @@ import { BlurView } from 'expo-blur';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
+import { radius } from '../../theme/radius';
+import { FoodImageCatalogPicker } from './FoodImageCatalogPicker';
 import {
+  createFood,
   macrosForGrams,
   setFoodFavorite,
   deleteFood,
   resolveImageUrl,
+  sharedImageUrl,
   type FoodRow,
 } from '../../services/foodService';
 import {
@@ -46,6 +50,18 @@ const PORTION_UNITS: PortionUnit[] = [
   { key: 'cup',  label: 'taza',       grams: 200 },
 ];
 
+/** Producto encontrado en OFF pero aún no guardado en el catálogo del usuario */
+export type DraftFoodFromScan = {
+  name: string;
+  brand: string | null;
+  barcode: string;
+  kcal_100g: number | null;
+  protein_g_100g: number | null;
+  carbs_g_100g: number | null;
+  fat_g_100g: number | null;
+  openfoodfacts_code: string;
+};
+
 export type FoodDetailPayload =
   | {
       kind: 'food';
@@ -54,7 +70,15 @@ export type FoodDetailPayload =
       mealType: MealType;
       dateISO: string;
     }
-  | { kind: 'meal_log'; log: MealLog };
+  | { kind: 'meal_log'; log: MealLog }
+  | {
+      kind: 'draft_food';
+      draft: DraftFoodFromScan;
+      mealType: MealType;
+      dateISO: string;
+      /** Solo guardar en catálogo, sin registrar en el plan */
+      catalogOnly: boolean;
+    };
 
 type Props = {
   visible: boolean;
@@ -109,6 +133,9 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded, onFoodFavo
   const [infoOpen, setInfoOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [favorite, setFavorite] = useState(false);
+  /** Imagen del bucket `food-images` (mismo flujo que alta manual). */
+  const [draftImageKey, setDraftImageKey] = useState<string | null>(null);
+  const [catalogPickerOpen, setCatalogPickerOpen] = useState(false);
 
   /** Swipe-to-close */
   const translateY = useRef(new Animated.Value(0)).current;
@@ -143,8 +170,11 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded, onFoodFavo
   ).current;
 
   const isFood = payload?.kind === 'food';
+  const isDraft = payload?.kind === 'draft_food';
   const food = isFood ? payload.food : null;
+  const draft = isDraft ? payload.draft : null;
   const log = payload?.kind === 'meal_log' ? payload.log : null;
+  const isCatalogDraft = isDraft && payload.catalogOnly;
 
   useEffect(() => {
     if (!visible || !payload) return;
@@ -158,10 +188,17 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded, onFoodFavo
       setSelectedUnit(PORTION_UNITS[0]);
       setMealType(payload.mealType);
     }
+    if (payload.kind === 'draft_food') {
+      setQtyStr('100');
+      setSelectedUnit(PORTION_UNITS[0]);
+      setMealType(payload.mealType);
+    }
     setInfoOpen(false);
     setUnitPickerOpen(false);
     setCookingPickerOpen(false);
     setCookingState('crudo');
+    setDraftImageKey(null);
+    setCatalogPickerOpen(false);
     if (payload?.kind === 'food') {
       setFavorite(!!payload.food.is_favorite);
     } else {
@@ -170,6 +207,10 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded, onFoodFavo
     translateY.setValue(0);
   }, [visible, payload]);
 
+  useEffect(() => {
+    if (!visible) setCatalogPickerOpen(false);
+  }, [visible]);
+
   const computedGrams = useMemo(() => {
     const qtyNum = parseFloat(qtyStr.replace(',', '.'));
     const q = Number.isFinite(qtyNum) && qtyNum > 0 ? qtyNum : 1;
@@ -177,9 +218,20 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded, onFoodFavo
   }, [qtyStr, selectedUnit]);
 
   const totalsFood = useMemo(() => {
-    if (!food) return null;
-    return macrosForGrams(food.kcal_100g, food.protein_g_100g, food.carbs_g_100g, food.fat_g_100g, computedGrams);
-  }, [food, computedGrams]);
+    if (food) {
+      return macrosForGrams(food.kcal_100g, food.protein_g_100g, food.carbs_g_100g, food.fat_g_100g, computedGrams);
+    }
+    if (draft) {
+      return macrosForGrams(
+        draft.kcal_100g,
+        draft.protein_g_100g,
+        draft.carbs_g_100g,
+        draft.fat_g_100g,
+        computedGrams,
+      );
+    }
+    return null;
+  }, [food, draft, computedGrams]);
 
   const barFood = useMemo(() => {
     if (!totalsFood) return null;
@@ -193,18 +245,75 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded, onFoodFavo
 
   const title = useMemo(() => {
     if (food) return food.name.trim();
+    if (draft) return draft.name.trim();
     if (log) return log.product_display_name?.trim() || log.title?.trim() || 'Registro';
     return '';
-  }, [food, log]);
+  }, [food, draft, log]);
 
   const subtitle = useMemo(() => {
     if (food) return food.brand?.trim() || 'Genérico';
+    if (draft) return draft.brand?.trim() || 'Genérico';
     if (log) return getMealTypeLabel(log.meal_type);
     return '';
-  }, [food, log]);
+  }, [food, draft, log]);
 
   const handleAdd = useCallback(async () => {
-    if (!food || !payload || payload.kind !== 'food') return;
+    if (!payload) return;
+
+    if (payload.kind === 'draft_food') {
+      if (!draftImageKey) {
+        Alert.alert(
+          'Falta la imagen',
+          'Seleccioná una imagen del catálogo (storage food-images) para crear el alimento.',
+        );
+        return;
+      }
+      const d = payload.draft;
+      setSaving(true);
+      try {
+        const created = await createFood({
+          name: d.name.trim(),
+          brand: d.brand,
+          barcode: d.barcode,
+          kcal_100g: d.kcal_100g,
+          protein_g_100g: d.protein_g_100g,
+          carbs_g_100g: d.carbs_g_100g,
+          fat_g_100g: d.fat_g_100g,
+          default_serving_grams: 100,
+          source: 'openfoodfacts',
+          openfoodfacts_code: d.openfoodfacts_code,
+          image_key: draftImageKey,
+        });
+        if (!created) {
+          Alert.alert('Error', 'No se pudo guardar el alimento. Reintentá.');
+          return;
+        }
+        if (payload.catalogOnly) {
+          onAdded?.();
+          onClose();
+          return;
+        }
+
+        const brandPrefix = created.brand ? `${created.brand} · ` : '';
+        const baseName = `${brandPrefix}${created.name}`.trim();
+        const stateSuffix = cookingState === 'cocido' ? ' (cocido)' : ' (crudo)';
+        const displayName = `${baseName}${stateSuffix}`;
+        const photoUri = resolveImageUrl(created);
+        const ok = await addMealFromFoodWithPortion(created, mealType, payload.dateISO, computedGrams, {
+          productDisplayName: displayName,
+          photoUri,
+        });
+        if (ok) {
+          onAdded?.();
+          onClose();
+        }
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
+    if (!food || payload.kind !== 'food') return;
     setSaving(true);
     try {
       const brandPrefix = food.brand ? `${food.brand} · ` : '';
@@ -220,7 +329,7 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded, onFoodFavo
     } finally {
       setSaving(false);
     }
-  }, [food, payload, computedGrams, mealType, cookingState, onAdded, onClose]);
+  }, [food, payload, computedGrams, mealType, cookingState, onAdded, onClose, draftImageKey]);
 
   const pickMeal = useCallback(() => {
     Alert.alert(
@@ -274,8 +383,12 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded, onFoodFavo
 
   if (!payload) return null;
 
-  const showAdd = payload.kind === 'food';
-  const heroImageUri = (food ? resolveImageUrl(food) : null) ?? log?.photo_url?.trim() ?? null;
+  const showAdd = payload.kind === 'food' || payload.kind === 'draft_food';
+  const showPortion = showAdd && (food != null || draft != null);
+  const heroImageUri =
+    (food ? resolveImageUrl(food) : null) ??
+    log?.photo_url?.trim() ??
+    (draftImageKey ? sharedImageUrl(draftImageKey) : null);
 
   return (
     <Modal
@@ -331,10 +444,34 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded, onFoodFavo
             <View style={styles.heroBlock}>
               <View style={styles.heroImageWrap}>
                 {heroImageUri ? (
-                  <Image
-                    source={{ uri: heroImageUri }}
-                    style={styles.heroImage}
-                  />
+                  <TouchableOpacity
+                    onPress={isDraft ? () => setCatalogPickerOpen(true) : undefined}
+                    activeOpacity={isDraft ? 0.8 : 1}
+                  >
+                    <Image source={{ uri: heroImageUri }} style={styles.heroImage} />
+                    {isDraft && (
+                      <View style={styles.heroEditBadge}>
+                        <MaterialCommunityIcons name="pencil" size={11} color="#fff" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ) : isDraft ? (
+                  <TouchableOpacity
+                    style={styles.draftCatalogTile}
+                    onPress={() => setCatalogPickerOpen(true)}
+                    activeOpacity={0.88}
+                    accessibilityRole="button"
+                    accessibilityLabel="Elegir imagen del catálogo compartido"
+                  >
+                    <View style={styles.draftCatalogTileAccent} />
+                    <MaterialCommunityIcons
+                      name="image-outline"
+                      size={20}
+                      color={colors.primary.default}
+                    />
+                    <Text style={styles.draftCatalogTileLabel}>Catálogo</Text>
+                    <Text style={styles.draftCatalogTileMicro}>Elegir</Text>
+                  </TouchableOpacity>
                 ) : (
                   <View style={styles.heroPlaceholder}>
                     <MaterialCommunityIcons name="food-apple-outline" size={30} color={D.textSoft} />
@@ -342,7 +479,7 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded, onFoodFavo
                 )}
               </View>
 
-              {food?.source === 'openfoodfacts' ? (
+              {food?.source === 'openfoodfacts' || draft ? (
                 <View style={styles.offBadge}>
                   <MaterialCommunityIcons name="check-decagram" size={12} color="#FFFFFF" />
                 </View>
@@ -352,10 +489,10 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded, onFoodFavo
             <Text style={styles.title}>{title}</Text>
             <Text style={styles.subtitle}>{subtitle}</Text>
 
-            {showAdd && food && totalsFood ? (
+            {showAdd && totalsFood ? (
               <Text style={styles.portionHint}>
                 {computedGrams} g
-                {food.default_serving_grams ? ` · porción típica ${food.default_serving_grams} g` : ''}
+                {food?.default_serving_grams ? ` · porción típica ${food.default_serving_grams} g` : ''}
               </Text>
             ) : log ? (
               <Text style={styles.portionHint}>
@@ -433,6 +570,13 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded, onFoodFavo
                     <InfoRow label="Por 100 g — Carbohidratos"  value={`${fmtG(food.carbs_g_100g)} g`} />
                     <InfoRow label="Por 100 g — Grasas"         value={`${fmtG(food.fat_g_100g)} g`} />
                   </>
+                ) : showAdd && draft ? (
+                  <>
+                    <InfoRow label="Por 100 g — Energía"        value={`${draft.kcal_100g ?? '—'} kcal`} />
+                    <InfoRow label="Por 100 g — Proteínas"      value={`${fmtG(draft.protein_g_100g)} g`} />
+                    <InfoRow label="Por 100 g — Carbohidratos"  value={`${fmtG(draft.carbs_g_100g)} g`} />
+                    <InfoRow label="Por 100 g — Grasas"         value={`${fmtG(draft.fat_g_100g)} g`} />
+                  </>
                 ) : log ? (
                   <>
                     <InfoRow label="Momento"   value={getMealTypeLabel(log.meal_type)} />
@@ -444,7 +588,7 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded, onFoodFavo
             ) : null}
 
             {/* Cantidad / Porción / Tipo de Peso */}
-            {showAdd && food ? (
+            {showPortion ? (
               <View style={styles.portionSection}>
                 <View style={styles.portionRow}>
                   {/* Cantidad */}
@@ -553,9 +697,9 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded, onFoodFavo
               </View>
             ) : null}
 
-            {food?.openfoodfacts_code ? (
+            {(food?.openfoodfacts_code ?? draft?.openfoodfacts_code) ? (
               <Text style={styles.offAttr}>
-                Datos nutricionales: Open Food Facts (ODbL) · {food.openfoodfacts_code}
+                Datos nutricionales: Open Food Facts (ODbL) · {food?.openfoodfacts_code ?? draft?.openfoodfacts_code}
               </Text>
             ) : null}
           </ScrollView>
@@ -563,18 +707,42 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded, onFoodFavo
           {/* ── Footer acción ──────────────────────────────────────── */}
           <View style={styles.sheetFooter}>
             {showAdd ? (
-              <>
-                <View style={[styles.primaryBtn, saving && styles.primaryBtnDisabled]}>
+              isCatalogDraft ? (
+                <TouchableOpacity
+                  style={[
+                    styles.primaryBtnSingle,
+                    styles.primaryFooterDraft,
+                    (saving || !draftImageKey) && styles.primaryBtnDisabled,
+                  ]}
+                  onPress={() => void handleAdd()}
+                  activeOpacity={0.92}
+                  disabled={saving || !draftImageKey}
+                >
                   {saving ? (
-                    <ActivityIndicator color={colors.primary.text} style={{ paddingVertical: 14 }} />
+                    <ActivityIndicator color={colors.primary.text} style={{ paddingVertical: 8 }} />
+                  ) : (
+                    <Text style={[styles.primaryBtnText, styles.primaryFooterDraftText]}>Guardar en mi lista</Text>
+                  )}
+                </TouchableOpacity>
+              ) : (
+                <View
+                  style={[
+                    styles.primaryBtn,
+                    isDraft && styles.primaryFooterDraftRow,
+                    (saving || (isDraft && !draftImageKey)) && styles.primaryBtnDisabled,
+                  ]}
+                >
+                  {saving ? (
+                    <ActivityIndicator color={colors.primary.text} style={{ paddingVertical: 8 }} />
                   ) : (
                     <>
                       <TouchableOpacity
-                        style={styles.primaryBtnMain}
+                        style={[styles.primaryBtnMain, isDraft && styles.primaryFooterDraftMain]}
                         onPress={() => void handleAdd()}
                         activeOpacity={0.92}
+                        disabled={isDraft && !draftImageKey}
                       >
-                        <Text style={styles.primaryBtnText}>
+                        <Text style={[styles.primaryBtnText, styles.primaryFooterDraftText]}>
                           Agregar a {getMealTypeLabel(mealType)}
                         </Text>
                       </TouchableOpacity>
@@ -585,7 +753,7 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded, onFoodFavo
                     </>
                   )}
                 </View>
-              </>
+              )
             ) : (
               <TouchableOpacity style={styles.secondaryBtn} onPress={onClose} activeOpacity={0.9}>
                 <Text style={styles.secondaryBtnText}>Cerrar</Text>
@@ -593,6 +761,14 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded, onFoodFavo
             )}
           </View>
         </Animated.View>
+
+        {/* Dentro del mismo Modal para que quede por encima del sheet (si va fuera, RN dibuja debajo del Modal) */}
+        <FoodImageCatalogPicker
+          visible={catalogPickerOpen}
+          onClose={() => setCatalogPickerOpen(false)}
+          onSelect={(key) => setDraftImageKey(key || null)}
+          currentKey={draftImageKey}
+        />
       </View>
     </Modal>
   );
@@ -639,8 +815,8 @@ const styles = StyleSheet.create({
   /** Sheet principal — overflow visible para que el picker overlay no quede clipeado */
   sheet: {
     backgroundColor: D.bg,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: D.borderMed,
     maxHeight: '92%',
@@ -655,7 +831,7 @@ const styles = StyleSheet.create({
   handle: {
     width: 36,
     height: 4,
-    borderRadius: 2,
+    borderRadius: radius.xxs,
     backgroundColor: 'rgba(255,255,255,0.18)',
   },
 
@@ -667,7 +843,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
     width: 38,
     height: 38,
-    borderRadius: 10,
+    borderRadius: radius.input,
     backgroundColor: D.surfaceHi,
     borderWidth: 1,
     borderColor: D.borderMed,
@@ -693,23 +869,81 @@ const styles = StyleSheet.create({
   heroImage: {
     width: 84,
     height: 84,
-    borderRadius: 16,
+    borderRadius: radius.lg,
     backgroundColor: D.surface,
   },
   heroPlaceholder: {
     width: 84,
     height: 84,
-    borderRadius: 16,
+    borderRadius: radius.lg,
     backgroundColor: D.surface,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: D.border,
   },
+  heroEditBadge: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  /** Slot de imagen — mismo tamaño que hero; estilo “drop zone” compacto */
+  draftCatalogTile: {
+    width: 84,
+    height: 84,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.primary.default,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.14,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  draftCatalogTileAccent: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+    backgroundColor: colors.primary.default,
+    opacity: 0.55,
+  },
+  draftCatalogTileLabel: {
+    marginTop: 5,
+    fontSize: 10,
+    fontWeight: '800',
+    color: D.text,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  draftCatalogTileMicro: {
+    marginTop: 1,
+    fontSize: 8,
+    fontWeight: '600',
+    color: D.textSoft,
+    letterSpacing: 0.2,
+  },
   offBadge: {
     marginTop: 8,
     backgroundColor: '#1a1a1a',
-    borderRadius: 999,
+    borderRadius: radius.full,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderWidth: 1,
@@ -749,7 +983,7 @@ const styles = StyleSheet.create({
     maxWidth: '25%',
     paddingVertical: 12,
     paddingHorizontal: 6,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: D.border,
     backgroundColor: D.surface,
@@ -776,7 +1010,7 @@ const styles = StyleSheet.create({
   barSection: { marginTop: 20 },
   barTrack: {
     height: 6,
-    borderRadius: 3,
+    borderRadius: radius.xsTight,
     overflow: 'hidden',
     flexDirection: 'row',
     backgroundColor: 'rgba(255,255,255,0.06)',
@@ -789,7 +1023,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  legendDot:  { width: 8, height: 8, borderRadius: 4 },
+  legendDot:  { width: 8, height: 8, borderRadius: radius.xs },
   legendText: { fontSize: 11, color: D.textMuted, fontWeight: '600' },
 
   infoToggle: {
@@ -799,7 +1033,7 @@ const styles = StyleSheet.create({
     marginTop: 18,
     paddingVertical: 14,
     paddingHorizontal: 14,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: D.border,
     backgroundColor: D.surface,
@@ -839,7 +1073,7 @@ const styles = StyleSheet.create({
   },
   portionCell: {
     flex: 1,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: D.border,
     backgroundColor: D.surface,
@@ -887,7 +1121,7 @@ const styles = StyleSheet.create({
   },
   pickerDropdown: {
     marginTop: 6,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: D.borderMed,
     backgroundColor: D.surfaceHi,
@@ -934,9 +1168,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'stretch',
     backgroundColor: colors.primary.default,
-    borderRadius: 14,
+    borderRadius: radius.mdL,
     minHeight: 52,
     overflow: 'hidden',
+  },
+  /** Mismo estilo que primaryBtn pero una sola acción a ancho completo */
+  primaryBtnSingle: {
+    backgroundColor: colors.primary.default,
+    borderRadius: radius.mdL,
+    minHeight: 52,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+  /** Botones inferiores en flujo borrador (escaneo OFF): más bajos */
+  primaryFooterDraft: {
+    minHeight: 42,
+    paddingVertical: 10,
+    borderRadius: radius.md,
+  },
+  primaryFooterDraftRow: {
+    minHeight: 42,
+    borderRadius: radius.md,
+  },
+  primaryFooterDraftMain: {
+    paddingVertical: 10,
+  },
+  primaryFooterDraftText: {
+    fontSize: 14,
+    fontWeight: '800',
   },
   primaryBtnDisabled: { opacity: 0.7 },
   primaryBtnMain: {
@@ -967,7 +1227,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 14,
-    borderRadius: 14,
+    borderRadius: radius.mdL,
     borderWidth: 1,
     borderColor: D.borderMed,
     backgroundColor: D.surface,
@@ -984,7 +1244,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 6,
     paddingVertical: 11,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: 'rgba(240,138,138,0.35)',
     backgroundColor: 'rgba(126,30,30,0.2)',

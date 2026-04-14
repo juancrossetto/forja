@@ -19,6 +19,7 @@ import {
 } from '../../services/measurementsService';
 import { useProgressStore } from '../../store/progressStore';
 import { todayISO } from '../../utils/dateUtils';
+import { radius } from '../../theme/radius';
 
 const BODY_IMAGES = {
   male:   require('../../../assets/male.png'),
@@ -319,7 +320,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   backBtn: {
-    width: 36, height: 36, borderRadius: 10,
+    width: 36, height: 36, borderRadius: radius.input,
     backgroundColor: COLORS.primary,
     justifyContent: 'center', alignItems: 'center', flexShrink: 0,
   },
@@ -333,7 +334,7 @@ const styles = StyleSheet.create({
   cardRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
   inputCard: {
     flex: 1, backgroundColor: COLORS.surface,
-    borderRadius: 14, borderLeftWidth: 3, padding: 16,
+    borderRadius: radius.mdL, borderLeftWidth: 3, padding: 16,
   },
   cardLabelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
   cardLabel: { fontSize: 9, fontWeight: '700', color: COLORS.textVariant, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 },
@@ -347,14 +348,14 @@ const styles = StyleSheet.create({
   genderToggle: {
     flexDirection: 'row',
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    borderRadius: radius.md,
     padding: 4,
     gap: 4,
     marginBottom: 14,
   },
   genderBtn: {
     flex: 1, flexDirection: 'row', gap: 6,
-    paddingVertical: 10, borderRadius: 10,
+    paddingVertical: 10, borderRadius: radius.input,
     justifyContent: 'center', alignItems: 'center',
   },
   genderBtnActive: { backgroundColor: COLORS.primary },
@@ -365,7 +366,7 @@ const styles = StyleSheet.create({
   bodyFrame: {
     height: BODY_H,
     backgroundColor: COLORS.surface,
-    borderRadius: 16,
+    borderRadius: radius.lg,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.04)',
@@ -390,7 +391,7 @@ const styles = StyleSheet.create({
   },
   hotspot: {
     position: 'absolute',
-    width: 22, height: 22, borderRadius: 11,
+    width: 22, height: 22, borderRadius: radius.chip,
     backgroundColor: 'rgba(209,255,38,0.20)',
     borderWidth: 1.5, borderColor: 'rgba(209,255,38,0.5)',
     justifyContent: 'center', alignItems: 'center',
@@ -400,7 +401,7 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
     transform: [{ scale: 1.25 }],
   },
-  hotspotDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.4)' },
+  hotspotDot: { width: 5, height: 5, borderRadius: radius.xsTight, backgroundColor: 'rgba(255,255,255,0.4)' },
   hotspotDotActive: { backgroundColor: '#000' },
   bodyLabel: { position: 'absolute', bottom: 16, left: 16 },
   bodyLabelSub: { fontSize: 9, fontWeight: '700', color: COLORS.primaryDim, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 2 },
@@ -411,7 +412,7 @@ const styles = StyleSheet.create({
   measurementRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 14,
-    backgroundColor: COLORS.surface, borderRadius: 12,
+    backgroundColor: COLORS.surface, borderRadius: radius.md,
     borderLeftWidth: 4, borderLeftColor: COLORS.surfaceHighest,
   },
   measurementRowActive: {
@@ -425,7 +426,7 @@ const styles = StyleSheet.create({
   measurementInput: {
     fontSize: 18, fontWeight: '700', color: COLORS.text,
     backgroundColor: COLORS.surfaceHighest,
-    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8,
+    borderRadius: radius.sm, paddingHorizontal: 12, paddingVertical: 8,
     width: 64, textAlign: 'right',
   },
   measurementInputActive: { borderWidth: 1, borderColor: COLORS.primary },
@@ -434,7 +435,7 @@ const styles = StyleSheet.create({
   // Save button
   saveButton: {
     backgroundColor: COLORS.primary, paddingVertical: 18,
-    borderRadius: 14, justifyContent: 'center', alignItems: 'center',
+    borderRadius: radius.mdL, justifyContent: 'center', alignItems: 'center',
     shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3, shadowRadius: 16, elevation: 8,
   },

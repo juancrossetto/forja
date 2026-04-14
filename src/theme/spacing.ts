@@ -25,22 +25,8 @@ export const spacing = {
   massive: 48,
 } as const;
 
-export const borderRadius = {
-  /** 4px */
-  xs: 4,
-  /** 8px */
-  sm: 8,
-  /** 12px */
-  md: 12,
-  /** 16px */
-  lg: 16,
-  /** 20px */
-  xl: 20,
-  /** 24px */
-  xxl: 24,
-  /** 9999px - Full round */
-  full: 9999,
-} as const;
+/** Radios: ver `radius.ts` (fuente única). Reexportado acá por compatibilidad de imports. */
+export { radius, borderRadius } from './radius';
 
 export const elevation = {
   none: {

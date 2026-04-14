@@ -34,6 +34,7 @@ import {
   type MealType,
 } from '../../services/mealService';
 import { colors } from '../../theme/colors';
+import { radius } from '../../theme/radius';
 
 const C = {
   bg: colors.background,
@@ -394,7 +395,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     paddingVertical: 12,
-    borderRadius: 14,
+    borderRadius: radius.scanner.panel,
     backgroundColor: C.surface,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.06)',
@@ -414,7 +415,7 @@ const styles = StyleSheet.create({
   frameOuter: {
     flex: 1,
     minHeight: 200,
-    borderRadius: 22,
+    borderRadius: radius.scanner.frameL,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: C.border,
@@ -422,7 +423,7 @@ const styles = StyleSheet.create({
   frameInner: {
     flex: 1,
     margin: 1,
-    borderRadius: 21,
+    borderRadius: radius.scanner.frameM,
     overflow: 'hidden',
     backgroundColor: '#000',
   },
@@ -461,7 +462,7 @@ const styles = StyleSheet.create({
   ctrlBtn: {
     width: 50,
     height: 50,
-    borderRadius: 14,
+    borderRadius: radius.scanner.panel,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: C.surface,
@@ -471,20 +472,20 @@ const styles = StyleSheet.create({
   shutterOuter: {
     width: 76,
     height: 76,
-    borderRadius: 38,
+    borderRadius: radius.scanner.outer,
     padding: 3,
     backgroundColor: 'rgba(209,255,38,0.2)',
   },
   shutterGradient: {
     flex: 1,
-    borderRadius: 35,
+    borderRadius: radius.scanner.ring,
     alignItems: 'center',
     justifyContent: 'center',
   },
   shutterCore: {
     width: 52,
     height: 52,
-    borderRadius: 26,
+    borderRadius: radius.scanner.lens,
     backgroundColor: colors.background,
     borderWidth: 3,
     borderColor: colors.primary.default,
@@ -504,7 +505,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.lime,
     paddingHorizontal: 22,
     paddingVertical: 12,
-    borderRadius: 14,
+    borderRadius: radius.scanner.panel,
   },
   permBtnText: { fontWeight: '800', color: colors.primary.text },
   webFallback: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 12 },
