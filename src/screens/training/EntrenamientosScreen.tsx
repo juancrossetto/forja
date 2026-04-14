@@ -315,10 +315,10 @@ const styles = StyleSheet.create({
     marginBottom: 48,
   },
   headerTitle: {
-    fontSize: 56,
+    fontSize: 44,
     fontWeight: '900',
     color: colors.primary,
-    lineHeight: 56,
+    lineHeight: 46,
     letterSpacing: -1.5,
     marginBottom: 16,
   },

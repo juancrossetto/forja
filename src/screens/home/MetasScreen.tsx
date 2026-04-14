@@ -69,7 +69,7 @@ const MetasScreen: React.FC = () => {
 
   const [loading, setLoading] = useState(true);
   const [goals, setGoals] = useState<DailyGoal[]>([]);
-  const [mealCount, setMealCount] = useState(0);
+  const [mealKcal, setMealKcal] = useState(0);
   const [hydrationMl, setHydrationMl] = useState<number | null>(null);
   const [weightSeries, setWeightSeries] = useState<number[]>([]);
   const [currentWeight, setCurrentWeight] = useState<number | null>(null);
@@ -99,7 +99,14 @@ const MetasScreen: React.FC = () => {
         getMeasurementHistory(14),
       ]);
       setGoals(g);
-      setMealCount(meals.length);
+      const kcal = Math.round(
+        meals.reduce((sum, m) => {
+          const included = m.is_included !== false;
+          if (!included) return sum;
+          return sum + (Number(m.energy_kcal) || 0);
+        }, 0),
+      );
+      setMealKcal(kcal);
       setHydrationMl(hyd?.total_ml ?? 0);
       const withW = meas.filter((m) => m.weight_kg != null && m.weight_kg > 0);
       const last7 = [...withW].reverse().slice(-7);
@@ -165,12 +172,12 @@ const MetasScreen: React.FC = () => {
       setTargetModal({
         goal,
         draft: String(Math.round(tgt)),
-        label: 'Meta de comidas (por día)',
-        suffix: 'comidas',
+        label: 'Meta de calorías (por día)',
+        suffix: 'kcal',
         keyboardType: 'number-pad',
         parse: (s) => {
           const n = parseInt(s.replace(/\D/g, ''), 10);
-          if (!Number.isFinite(n) || n < 1 || n > 12) return null;
+          if (!Number.isFinite(n) || n < 300 || n > 10000) return null;
           return n;
         },
         formatSave: (n) => n,
@@ -254,7 +261,7 @@ const MetasScreen: React.FC = () => {
     const cur = Number(goal.current_value ?? 0);
 
     if (gt === 'meals') {
-      const p = pct(mealCount, target);
+      const p = pct(mealKcal, target);
       return (
         <>
           <Text style={styles.cardEyebrow}>NUTRICIÓN</Text>
@@ -263,8 +270,8 @@ const MetasScreen: React.FC = () => {
               {getGoalDisplayText(goal)}
             </Text>
             <View style={styles.cardValueCol}>
-              <Text style={styles.cardValueMain}>{mealCount}</Text>
-              <Text style={styles.cardValueSub}>/ {Math.round(target)}</Text>
+              <Text style={styles.cardValueMain}>{mealKcal.toLocaleString('es-AR')}</Text>
+              <Text style={styles.cardValueSub}>/ {Math.round(target).toLocaleString('es-AR')} kcal</Text>
             </View>
           </View>
           <View style={styles.progressBarContainer}>

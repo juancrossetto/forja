@@ -98,6 +98,39 @@ function formatPortionLine(item: MealLog): string {
   return 'Porción registrada';
 }
 
+/** Unidad corta para la columna derecha del ítem: "200 g", "Porción". */
+function formatPortionUnit(item: MealLog): string {
+  const g = item.portion_grams;
+  if (g != null && Number(g) > 0) {
+    return `${Math.round(Number(g))} g`;
+  }
+  return 'Porción';
+}
+
+const PREP_RE = /\(\s*(peso\s+)?(cocido|cruda?|hervido|asado)\s*\)/i;
+const PREP_TRAILING_RE = /\b(peso\s+cocido|peso\s+crudo|cocido|cruda?|hervido|asado)\b/i;
+
+/**
+ * Extrae una nota de preparación del nombre del alimento.
+ * Ej: "Arroz cocido" → { clean: "Arroz", note: "(cocido)" }
+ *     "Pollo (peso crudo)" → { clean: "Pollo", note: "(peso crudo)" }
+ */
+function extractPrepNote(name: string): { clean: string; note: string | null } {
+  const parenMatch = name.match(PREP_RE);
+  if (parenMatch) {
+    const inner = parenMatch[0].replace(/[()]/g, '').trim();
+    const clean = name.replace(parenMatch[0], '').replace(/\s{2,}/g, ' ').trim();
+    return { clean: clean || name, note: `(${inner})` };
+  }
+  const trailingMatch = name.match(PREP_TRAILING_RE);
+  if (trailingMatch) {
+    const kw = trailingMatch[0];
+    const clean = name.replace(new RegExp(`\\b${kw}\\b`, 'i'), '').replace(/[,\s]+$/, '').replace(/\s{2,}/g, ' ').trim();
+    return { clean: clean || name, note: `(${kw.toLowerCase()})` };
+  }
+  return { clean: name, note: null };
+}
+
 interface ShoppingItem {
   id: string;
   name: string;
@@ -408,10 +441,11 @@ const ComidasScreen: React.FC<ComidasScreenProps> = ({
   );
 
   const renderEmbeddedMealLine = (item: MealLog, index: number, total: number) => {
-    const title =
+    const rawTitle =
       (item.product_display_name?.trim()) ||
       (item.title && item.title.trim()) ||
       getMealTypeLabel(item.meal_type);
+    const { clean: title, note: prepNote } = extractPrepNote(rawTitle);
     const uri = item.photo_url?.trim() ? item.photo_url : null;
     const k = item.energy_kcal != null && item.energy_kcal > 0 ? Math.round(item.energy_kcal) : null;
     const isLast = index === total - 1;
@@ -451,10 +485,13 @@ const ComidasScreen: React.FC<ComidasScreenProps> = ({
             <Text style={styles.embeddedLineTitle} numberOfLines={2}>
               {title}
             </Text>
+            {prepNote ? (
+              <Text style={styles.embeddedLinePrepNote}>{prepNote}</Text>
+            ) : null}
           </View>
           <View style={styles.embeddedRightCol}>
-            <Text style={styles.embeddedLinePortion} numberOfLines={2}>
-              {formatPortionLine(item)}
+            <Text style={styles.embeddedLinePortion} numberOfLines={1}>
+              {formatPortionUnit(item)}
             </Text>
             {k != null ? (
               <Text style={styles.embeddedKcal}>{k} kcal</Text>
@@ -1165,7 +1202,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 14,
     marginTop: 10,
     padding: 14,
-    borderRadius: 16,
+    borderRadius: 20,
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: `${COLORS.text}10`,
@@ -1241,7 +1278,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   slotCardEmbedded: {
-    borderRadius: 16,
+    borderRadius: 20,
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: `${COLORS.text}0D`,
@@ -1284,7 +1321,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 10,
     marginTop: 2,
-    borderRadius: 10,
+    borderRadius: 14,
     backgroundColor: `${COLORS.text}06`,
     borderWidth: 1,
     borderColor: `${COLORS.text}14`,
@@ -1306,13 +1343,13 @@ const styles = StyleSheet.create({
   embeddedThumb: {
     width: 40,
     height: 40,
-    borderRadius: 9,
+    borderRadius: 10,
     backgroundColor: COLORS.surfaceHigh,
   },
   embeddedThumbPlaceholder: {
     width: 40,
     height: 40,
-    borderRadius: 9,
+    borderRadius: 10,
     backgroundColor: COLORS.surfaceHigh,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1322,31 +1359,38 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   embeddedLineTitle: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '400',
     color: COLORS.text,
-    lineHeight: 18,
+    lineHeight: 17,
+  },
+  embeddedLinePrepNote: {
+    fontSize: 11,
+    fontWeight: '400',
+    color: COLORS.textVariant,
+    marginTop: 1,
   },
   embeddedLinePortion: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '500',
-    color: COLORS.textVariant,
+    color: COLORS.text,
     textAlign: 'right',
   },
   embeddedRightCol: {
     alignItems: 'flex-end',
     justifyContent: 'center',
-    maxWidth: 120,
+    maxWidth: 90,
     gap: 2,
   },
   embeddedKcal: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 11,
+    fontWeight: '500',
     color: COLORS.textVariant,
+    textAlign: 'right',
   },
   embeddedKcalMuted: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '500',
     color: `${COLORS.text}40`,
   },
   swipeDeleteActionsWrap: {

@@ -9,9 +9,9 @@ import { navigationChrome } from '../../theme/navigationChrome';
 
 /** Config tipo app fitness: rápido pero con un poco de inercia */
 export const TAB_SPRING = {
-  damping: 20,
-  stiffness: 300,
-  mass: 0.72,
+  damping: 18,
+  stiffness: 170,
+  mass: 0.95,
 } as const;
 
 /** Rectángulo del ítem respecto al mismo padre que el highlight (p. ej. track / dock interior) */
@@ -34,6 +34,10 @@ type SlidingTabHighlightProps = {
   horizontalContentPadding?: number;
   slotLayouts?: Array<TabSlotLayout | null | undefined>;
   style?: ViewStyle;
+  mode?: 'pill' | 'top-indicator';
+  topIndicatorHeight?: number;
+  topIndicatorWidthRatio?: number;
+  topIndicatorTop?: number;
   /** Solo si no hay medidas por slot (fallback) */
   height?: number;
   top?: number;
@@ -63,6 +67,10 @@ export function SlidingTabHighlight({
   horizontalContentPadding = 0,
   slotLayouts,
   style,
+  mode = 'pill',
+  topIndicatorHeight = 3,
+  topIndicatorWidthRatio = 0.64,
+  topIndicatorTop = 2,
   height: fallbackH = 40,
   top: fallbackTop = 8,
 }: SlidingTabHighlightProps) {
@@ -76,22 +84,38 @@ export function SlidingTabHighlight({
 
     if (layoutsReady(slotLayouts, tabCount)) {
       const slot = slotLayouts[activeIndex];
-      const inset = pillInset;
-      pillX.value = withSpring(slot.x + inset, TAB_SPRING);
-      pillW.value = withSpring(Math.max(0, slot.width - 2 * inset), TAB_SPRING);
-      pillTop.value = withSpring(slot.y + inset, TAB_SPRING);
-      pillH.value = withSpring(Math.max(0, slot.height - 2 * inset), TAB_SPRING);
+      if (mode === 'top-indicator') {
+        const w = Math.max(0, slot.width * topIndicatorWidthRatio);
+        pillX.value = withSpring(slot.x + (slot.width - w) / 2, TAB_SPRING);
+        pillW.value = withSpring(w, TAB_SPRING);
+        pillTop.value = withSpring(topIndicatorTop, TAB_SPRING);
+        pillH.value = withSpring(topIndicatorHeight, TAB_SPRING);
+      } else {
+        const inset = pillInset;
+        pillX.value = withSpring(slot.x + inset, TAB_SPRING);
+        pillW.value = withSpring(Math.max(0, slot.width - 2 * inset), TAB_SPRING);
+        pillTop.value = withSpring(slot.y + inset, TAB_SPRING);
+        pillH.value = withSpring(Math.max(0, slot.height - 2 * inset), TAB_SPRING);
+      }
       return;
     }
 
     const pad = horizontalContentPadding;
     const innerW = Math.max(0, containerWidth - 2 * pad);
     const slotW = innerW / tabCount;
-    const w = Math.max(0, slotW - pillInset * 2);
-    pillW.value = withSpring(w, TAB_SPRING);
-    pillX.value = withSpring(pad + activeIndex * slotW + pillInset, TAB_SPRING);
-    pillTop.value = withSpring(fallbackTop, TAB_SPRING);
-    pillH.value = withSpring(fallbackH, TAB_SPRING);
+    if (mode === 'top-indicator') {
+      const w = Math.max(0, slotW * topIndicatorWidthRatio);
+      pillW.value = withSpring(w, TAB_SPRING);
+      pillX.value = withSpring(pad + activeIndex * slotW + (slotW - w) / 2, TAB_SPRING);
+      pillTop.value = withSpring(topIndicatorTop, TAB_SPRING);
+      pillH.value = withSpring(topIndicatorHeight, TAB_SPRING);
+    } else {
+      const w = Math.max(0, slotW - pillInset * 2);
+      pillW.value = withSpring(w, TAB_SPRING);
+      pillX.value = withSpring(pad + activeIndex * slotW + pillInset, TAB_SPRING);
+      pillTop.value = withSpring(fallbackTop, TAB_SPRING);
+      pillH.value = withSpring(fallbackH, TAB_SPRING);
+    }
   }, [
     activeIndex,
     containerWidth,
@@ -99,6 +123,10 @@ export function SlidingTabHighlight({
     pillInset,
     horizontalContentPadding,
     slotLayouts,
+    mode,
+    topIndicatorHeight,
+    topIndicatorWidthRatio,
+    topIndicatorTop,
     fallbackTop,
     fallbackH,
   ]);

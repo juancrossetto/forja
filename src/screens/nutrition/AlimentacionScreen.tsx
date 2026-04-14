@@ -4,23 +4,22 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   TextInput,
   FlatList,
   ActivityIndicator,
   Alert,
   Linking,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   Animated,
   Image,
   type LayoutChangeEvent,
 } from 'react-native';
 import {
-  Swipeable,
   GestureHandlerRootView,
-  TouchableOpacity as GHTouchableOpacity,
 } from 'react-native-gesture-handler';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import {
   useNavigation,
@@ -38,7 +37,6 @@ import ComidasScreen from './ComidasScreen';
 import {
   searchFoods,
   createFood,
-  deleteFood,
   resolveImageUrl,
   sharedImageUrl,
   type FoodRow,
@@ -90,27 +88,6 @@ const SUB_ITEMS: { key: SubTab; label: string; icon: React.ComponentProps<typeof
   { key: 'voz', label: 'Voz', icon: 'microphone' },
 ];
 
-function CatalogFoodSwipeLeftAction({ onDelete }: { onDelete: () => void }) {
-  return (
-    <GHTouchableOpacity
-      style={styles.swipeDeleteRoot}
-      activeOpacity={0.92}
-      onPress={onDelete}
-    >
-      <LinearGradient
-        colors={['#3a1512', colors.tertiary.dark, colors.tertiary.default]}
-        locations={[0, 0.42, 1]}
-        start={{ x: 0, y: 0.5 }}
-        end={{ x: 1, y: 0.5 }}
-        style={styles.swipeDeleteGradient}
-      >
-        <MaterialCommunityIcons name="delete-outline" size={24} color="rgba(255,255,255,0.95)" />
-        <Text style={styles.swipeDeleteText}>Eliminar</Text>
-      </LinearGradient>
-    </GHTouchableOpacity>
-  );
-}
-
 function AlimentacionBuscarPanel({
   pendingMealType,
   initialSearchQuery,
@@ -126,13 +103,44 @@ function AlimentacionBuscarPanel({
   /** Incrementar al actualizar favoritos desde el detalle */
   catalogRefreshKey: number;
 }) {
+  const parseNumericInput = (value: string): number | null => {
+    const normalized = value.trim().replace(',', '.');
+    if (!normalized) return null;
+    const n = Number.parseFloat(normalized);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const toPer100 = (value: number | null, baseGrams: number): number | null => {
+    if (value == null) return null;
+    return (value * 100) / baseGrams;
+  };
+  const formatKcalMeta = (food: FoodRow): string => {
+    const kcal100 = food.kcal_100g;
+    if (kcal100 == null) return '—';
+    const serving = food.default_serving_grams;
+    if (serving != null && serving > 0 && Math.abs(serving - 100) > 0.001) {
+      const kcalServing = Math.round((kcal100 * serving) / 100);
+      const servingLabel = Number.isInteger(serving) ? `${serving}` : serving.toFixed(1);
+      const kcal100Label = Number.isInteger(kcal100) ? `${kcal100}` : kcal100.toFixed(1);
+      return `${kcalServing} kcal/${servingLabel}g · ${kcal100Label} kcal/100g`;
+    }
+    return `${kcal100} kcal/100g`;
+  };
+
   const [q, setQ] = useState('');
   const [foods, setFoods] = useState<FoodRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: '', kcal: '', protein: '', carbs: '', fat: '' });
+  const [form, setForm] = useState({
+    name: '',
+    referenceGrams: '100',
+    kcal: '',
+    protein: '',
+    carbs: '',
+    fat: '',
+  });
   const [manualImageKey, setManualImageKey] = useState<string | null>(null);
   const [manualImagePickerOpen, setManualImagePickerOpen] = useState(false);
 
@@ -154,19 +162,9 @@ function AlimentacionBuscarPanel({
   }, [q, favoritesOnly, catalogRefreshKey]);
 
   const resetForm = () => {
-    setForm({ name: '', kcal: '', protein: '', carbs: '', fat: '' });
+    setForm({ name: '', referenceGrams: '100', kcal: '', protein: '', carbs: '', fat: '' });
     setManualImageKey(null);
   };
-
-  const handleDeleteFood = useCallback(async (item: FoodRow) => {
-    const ok = await deleteFood(item.id);
-    if (ok) {
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setFoods((prev) => prev.filter((f) => f.id !== item.id));
-    } else {
-      Alert.alert('Error', 'No se pudo eliminar. Reintentá.');
-    }
-  }, []);
 
   const handleSaveManual = async () => {
     if (!form.name.trim()) {
@@ -177,14 +175,26 @@ function AlimentacionBuscarPanel({
       Alert.alert('Falta la imagen', 'Seleccioná una imagen del catálogo para crear el alimento.');
       return;
     }
+    const referenceGrams = parseNumericInput(form.referenceGrams);
+    if (referenceGrams == null || referenceGrams <= 0) {
+      Alert.alert('Gramaje inválido', 'Ingresá una cantidad de gramos mayor a 0.');
+      return;
+    }
+
+    const kcalRef = parseNumericInput(form.kcal);
+    const proteinRef = parseNumericInput(form.protein);
+    const carbsRef = parseNumericInput(form.carbs);
+    const fatRef = parseNumericInput(form.fat);
+
     setSaving(true);
     try {
       const food = await createFood({
         name: form.name.trim(),
-        kcal_100g: form.kcal ? parseFloat(form.kcal) : null,
-        protein_g_100g: form.protein ? parseFloat(form.protein) : null,
-        carbs_g_100g: form.carbs ? parseFloat(form.carbs) : null,
-        fat_g_100g: form.fat ? parseFloat(form.fat) : null,
+        kcal_100g: toPer100(kcalRef, referenceGrams),
+        protein_g_100g: toPer100(proteinRef, referenceGrams),
+        carbs_g_100g: toPer100(carbsRef, referenceGrams),
+        fat_g_100g: toPer100(fatRef, referenceGrams),
+        default_serving_grams: referenceGrams,
         source: 'manual',
         image_key: manualImageKey,
       });
@@ -204,42 +214,58 @@ function AlimentacionBuscarPanel({
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <View style={styles.buscarRoot}>
-          <Text style={styles.buscarTitle}>Buscar en tu lista</Text>
-          <Text style={styles.buscarHint}>
-            Filtrá tu lista personal. Tocá un alimento para ver el detalle y agregarlo al día. Escanear o manual
-            agregan a la lista sin registrar el día.
-          </Text>
-          {pendingMealType ? (
-            <Text style={styles.buscarPendingHint}>Momento: {getMealTypeLabel(pendingMealType)}</Text>
-          ) : (
-            <Text style={styles.buscarPendingHintMuted}>Sin momento fijo · se usa desayuno</Text>
-          )}
-          <Text style={styles.catSwipeHint}>Deslizá hacia la derecha y tocá Eliminar para quitar de tu lista.</Text>
-
-          <View style={styles.buscarFavoritesRow}>
-            <Text style={styles.buscarFavoritesLabel}>Solo favoritos</Text>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View style={styles.buscarRoot}>
+            <View style={styles.buscarFilterTabs}>
             <TouchableOpacity
-              style={styles.buscarFavoritesHeartBtn}
+              style={[styles.buscarFilterTabBtn, !favoritesOnly && styles.buscarFilterTabBtnActive]}
               onPress={() => {
-                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setFavoritesOnly((v) => !v);
+                if (favoritesOnly) {
+                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setFavoritesOnly(false);
+                }
               }}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               accessibilityRole="button"
-              accessibilityLabel={favoritesOnly ? 'Quitar filtro solo favoritos' : 'Filtrar solo favoritos'}
+              accessibilityLabel="Ver base de datos"
+              accessibilityState={{ selected: !favoritesOnly }}
+              activeOpacity={0.75}
+            >
+              <MaterialCommunityIcons
+                name="database-outline"
+                size={15}
+                color={!favoritesOnly ? C.text : C.muted}
+              />
+              <Text style={[styles.buscarFilterTabText, !favoritesOnly && styles.buscarFilterTabTextActive]}>
+                Base de datos
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.buscarFilterTabBtn, favoritesOnly && styles.buscarFilterTabBtnActive]}
+              onPress={() => {
+                if (!favoritesOnly) {
+                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setFavoritesOnly(true);
+                }
+              }}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityRole="button"
+              accessibilityLabel="Ver favoritos"
               accessibilityState={{ selected: favoritesOnly }}
               activeOpacity={0.75}
             >
               <MaterialCommunityIcons
                 name={favoritesOnly ? 'heart' : 'heart-outline'}
-                size={26}
+                size={15}
                 color={favoritesOnly ? '#c62828' : C.muted}
               />
+              <Text style={[styles.buscarFilterTabText, favoritesOnly && styles.buscarFilterTabTextActive]}>
+                Favoritos
+              </Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.catActions}>
+            <View style={styles.catActions}>
             <TouchableOpacity style={styles.catActionBtn} onPress={onScanForCatalog} activeOpacity={0.85}>
               <MaterialCommunityIcons name="barcode-scan" size={18} color={C.lime} />
               <Text style={styles.catActionLabel}>Escanear</Text>
@@ -254,8 +280,8 @@ function AlimentacionBuscarPanel({
             </TouchableOpacity>
           </View>
 
-          {showForm ? (
-            <View style={styles.catForm}>
+            {showForm ? (
+              <View style={styles.catForm}>
               <TextInput
                 style={styles.catFormInput}
                 placeholder="Nombre *"
@@ -263,10 +289,18 @@ function AlimentacionBuscarPanel({
                 value={form.name}
                 onChangeText={(v) => setForm((f) => ({ ...f, name: v }))}
               />
+              <TextInput
+                style={styles.catFormInput}
+                placeholder="Estos macros corresponden a cuántos gramos? *"
+                placeholderTextColor="rgba(255,255,255,0.3)"
+                keyboardType="decimal-pad"
+                value={form.referenceGrams}
+                onChangeText={(v) => setForm((f) => ({ ...f, referenceGrams: v }))}
+              />
               <View style={styles.catFormRow}>
                 <TextInput
                   style={[styles.catFormInput, styles.catFormInputHalf]}
-                  placeholder="kcal/100g"
+                  placeholder="kcal (por porción)"
                   placeholderTextColor="rgba(255,255,255,0.3)"
                   keyboardType="decimal-pad"
                   value={form.kcal}
@@ -328,40 +362,26 @@ function AlimentacionBuscarPanel({
                   <Text style={styles.catSaveBtnText}>Guardar en la lista</Text>
                 )}
               </TouchableOpacity>
-              <FoodImageCatalogPicker
-                visible={manualImagePickerOpen}
-                onClose={() => setManualImagePickerOpen(false)}
-                onSelect={(key) => setManualImageKey(key || null)}
-                currentKey={manualImageKey}
-              />
-            </View>
-          ) : null}
+              </View>
+            ) : null}
 
-          <TextInput
-            style={[styles.buscarInput, { marginBottom: 8 }]}
-            placeholder="Filtrar tu lista…"
-            placeholderTextColor="rgba(255,255,255,0.35)"
-            value={q}
-            onChangeText={setQ}
-          />
-          {loading ? (
-            <ActivityIndicator color={C.lime} style={{ marginTop: 16 }} />
-          ) : (
-            <FlatList
-              data={foods}
-              keyExtractor={(item) => item.id}
-              style={{ marginTop: 4, flex: 1 }}
-              contentContainerStyle={{ paddingBottom: 32 }}
-              keyboardShouldPersistTaps="handled"
-              renderItem={({ item }) => (
-                <Swipeable
-                  friction={2}
-                  overshootLeft={false}
-                  enableTrackpadTwoFingerGesture
-                  renderLeftActions={() => (
-                    <CatalogFoodSwipeLeftAction onDelete={() => void handleDeleteFood(item)} />
-                  )}
-                >
+            <TextInput
+              style={[styles.buscarInput, { marginBottom: 8 }]}
+              placeholder="Filtrar tu lista…"
+              placeholderTextColor="rgba(255,255,255,0.35)"
+              value={q}
+              onChangeText={setQ}
+            />
+            {loading ? (
+              <ActivityIndicator color={C.lime} style={{ marginTop: 16 }} />
+            ) : (
+              <FlatList
+                data={foods}
+                keyExtractor={(item) => item.id}
+                style={{ marginTop: 4, flex: 1 }}
+                contentContainerStyle={{ paddingBottom: 32 }}
+                keyboardShouldPersistTaps="handled"
+                renderItem={({ item }) => (
                   <TouchableOpacity
                     style={styles.catalogRowCard}
                     onPress={() => onOpenFoodDetail(item)}
@@ -378,7 +398,7 @@ function AlimentacionBuscarPanel({
                     <View style={styles.catalogRowTextCol}>
                       <Text style={styles.buscarRowName}>{item.name}</Text>
                       <Text style={styles.buscarRowMeta}>
-                        {item.kcal_100g != null ? `${item.kcal_100g} kcal/100g` : '—'}
+                        {formatKcalMeta(item)}
                         {item.brand ? ` · ${item.brand}` : ''}
                       </Text>
                     </View>
@@ -388,16 +408,22 @@ function AlimentacionBuscarPanel({
                       <View style={styles.catalogRowHeartEndSpacer} />
                     )}
                   </TouchableOpacity>
-                </Swipeable>
-              )}
-              ListEmptyComponent={
-                <Text style={styles.buscarEmpty}>
-                  Sin coincidencias. Agregá con Manual o Escanear, o probá otro filtro.
-                </Text>
-              }
-            />
-          )}
-        </View>
+                )}
+                ListEmptyComponent={
+                  <Text style={styles.buscarEmpty}>
+                    Sin coincidencias. Agregá con Manual o Escanear, o probá otro filtro.
+                  </Text>
+                }
+              />
+            )}
+          </View>
+        </TouchableWithoutFeedback>
+        <FoodImageCatalogPicker
+          visible={manualImagePickerOpen}
+          onClose={() => setManualImagePickerOpen(false)}
+          onSelect={(key) => setManualImageKey(key || null)}
+          currentKey={manualImageKey}
+        />
       </GestureHandlerRootView>
     </KeyboardAvoidingView>
   );
@@ -552,9 +578,10 @@ export default function AlimentacionScreen() {
         : 'Alimento ingresado';
     setMealAddedToast(message);
     setPendingMealType(null);
+    bumpCatalogRefresh();
     closeFoodDetail();
     handleMealSaved();
-  }, [pendingMealType, closeFoodDetail, handleMealSaved]);
+  }, [pendingMealType, bumpCatalogRefresh, closeFoodDetail, handleMealSaved]);
 
   const handleRequestAddForSlot = useCallback((mt: MealType) => {
     setPendingMealType(mt);
@@ -577,6 +604,25 @@ export default function AlimentacionScreen() {
                 food,
                 mealType: pendingMealType ?? 'DES',
                 dateISO: activeDate,
+              });
+              setDetailVisible(true);
+            }}
+            onDraftFood={(offProduct, barcode) => {
+              setDetailPayload({
+                kind: 'draft_food',
+                draft: {
+                  name: offProduct.name,
+                  brand: offProduct.brand,
+                  barcode,
+                  kcal_100g: offProduct.kcal_100g,
+                  protein_g_100g: offProduct.protein_g_100g,
+                  carbs_g_100g: offProduct.carbs_g_100g,
+                  fat_g_100g: offProduct.fat_g_100g,
+                  openfoodfacts_code: offProduct.code,
+                },
+                mealType: pendingMealType ?? 'DES',
+                dateISO: activeDate,
+                catalogOnly: scannerCatalogOnly,
               });
               setDetailVisible(true);
             }}
@@ -641,10 +687,6 @@ export default function AlimentacionScreen() {
         payload={detailPayload}
         onClose={closeFoodDetail}
         onAdded={onFoodDetailAdded}
-        onFoodDeleted={() => {
-          bumpCatalogRefresh();
-          closeFoodDetail();
-        }}
         onFoodFavoriteChange={(updated) => {
           bumpCatalogRefresh();
           setDetailPayload((p) =>
@@ -669,6 +711,7 @@ export default function AlimentacionScreen() {
               activeIndex={activeSubIndex}
               containerWidth={submenuBarWidth}
               slotLayouts={submenuSlotLayouts}
+              pillInset={-4}
             />
             {SUB_ITEMS.map((item, index) => {
               const active = subTab === item.key;
@@ -706,6 +749,7 @@ export default function AlimentacionScreen() {
         scrollY={scrollY}
         topInset={insets.top}
         onHomePress={() => navigation.getParent()?.navigate('HomeStack')}
+        onAvatarPress={() => navigation.getParent()?.navigate('HomeStack', { screen: 'Perfil' })}
       />
     </View>
   );
@@ -730,6 +774,8 @@ const styles = StyleSheet.create({
     right: 0,
     paddingHorizontal: navigationChrome.screenEdgeInset,
     paddingTop: 4,
+    zIndex: 12,
+    elevation: 12,
   },
   /** Contenedor rectangular-redondeado */
   submenuPill: {
@@ -779,31 +825,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 8,
   },
-  buscarTitle: {
-    color: C.text,
-    fontSize: 18,
-    fontWeight: '800',
-    marginBottom: 6,
-    letterSpacing: -0.3,
-  },
-  buscarHint: {
-    fontSize: 12,
-    color: C.muted,
-    marginBottom: 8,
-    lineHeight: 17,
-  },
-  buscarPendingHint: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: C.cyan,
+  buscarFilterTabs: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
     marginBottom: 10,
-    letterSpacing: 0.2,
   },
-  buscarPendingHintMuted: {
-    fontSize: 11,
+  buscarFilterTabBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 2,
+    paddingBottom: 8,
+    marginRight: 16,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  buscarFilterTabBtnActive: {
+    borderBottomColor: C.text,
+  },
+  buscarFilterTabText: {
+    fontSize: 13,
+    color: C.muted,
     fontWeight: '600',
-    color: C.muted,
-    marginBottom: 10,
+  },
+  buscarFilterTabTextActive: {
+    color: C.text,
+    fontWeight: '700',
   },
   buscarInput: {
     backgroundColor: colors.surface.elevated,
@@ -909,33 +958,6 @@ const styles = StyleSheet.create({
   },
   catSaveBtnText: { color: colors.primary.text, fontWeight: '900', fontSize: 14 },
 
-  catSwipeHint: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: C.muted,
-    marginBottom: 10,
-    lineHeight: 15,
-    opacity: 0.9,
-  },
-  buscarFavoritesRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-    paddingVertical: 4,
-    paddingHorizontal: 4,
-  },
-  buscarFavoritesLabel: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '600',
-    color: C.text,
-    marginRight: 12,
-  },
-  buscarFavoritesHeartBtn: {
-    paddingVertical: 4,
-    paddingLeft: 8,
-  },
   catalogRowCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -967,26 +989,4 @@ const styles = StyleSheet.create({
   catalogRowHeartEnd: { flexShrink: 0 },
   catalogRowHeartEndSpacer: { width: 18, flexShrink: 0 },
   catalogRowTextCol: { flex: 1, minWidth: 0 },
-  swipeDeleteRoot: {
-    width: 112,
-    justifyContent: 'center',
-    marginBottom: 8,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  swipeDeleteGradient: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    minHeight: 56,
-    gap: 2,
-  },
-  swipeDeleteText: {
-    color: 'rgba(255,255,255,0.95)',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.35,
-    textTransform: 'uppercase',
-  },
 });

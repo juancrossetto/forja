@@ -52,31 +52,36 @@ export async function syncHydrationGoal(totalMl: number, date?: string): Promise
 }
 
 /**
- * Call after saving a meal. Counts total meals for the date and syncs.
+ * Call after saving a meal. Sums included meal kcal for the date and syncs.
  */
 export async function syncMealsGoal(date?: string): Promise<void> {
   const dateStr = date ?? todayISO();
   const userId = await getUserId();
   if (!userId) return;
 
-  // Count meals registered for this date
-  const { count, error } = await supabase
+  const { data, error } = await supabase
     .from('meal_logs')
-    .select('*', { count: 'exact', head: true })
+    .select('energy_kcal, is_included')
     .eq('user_id', userId)
     .eq('date', dateStr);
 
-  if (error) {
-    console.error('syncMealsGoal count error:', error.message);
+  if (error || !data) {
+    console.error('syncMealsGoal kcal error:', error?.message);
     return;
   }
 
-  const mealCount = count ?? 0;
-  const result = await syncGoalProgress('meals', mealCount, dateStr);
+  const kcal = Math.round(
+    data.reduce((sum, row) => {
+      const included = row.is_included !== false;
+      if (!included) return sum;
+      return sum + (Number(row.energy_kcal) || 0);
+    }, 0),
+  );
+  const result = await syncGoalProgress('meals', kcal, dateStr);
 
   if (result.newlyCompleted) {
-    await sendGoalCompletedNotification(`Registrar ${mealCount} comidas`);
-    triggerRemotePush(`Registrar ${mealCount} comidas`, 'meals');
+    await sendGoalCompletedNotification(`Registrar ${kcal.toLocaleString('es-AR')} kcal`);
+    triggerRemotePush(`Registrar ${kcal.toLocaleString('es-AR')} kcal`, 'meals');
   }
 }
 
@@ -142,14 +147,22 @@ export async function syncAllGoalsForDate(date?: string): Promise<void> {
   const totalMl = hydration?.total_ml ?? 0;
   await syncGoalProgress('hydration', totalMl, dateStr);
 
-  // 2. Meals
-  const { count: mealCount } = await supabase
+  // 2. Meals kcal (only included rows)
+  const { data: mealRows } = await supabase
     .from('meal_logs')
-    .select('*', { count: 'exact', head: true })
+    .select('energy_kcal, is_included')
     .eq('user_id', userId)
     .eq('date', dateStr);
 
-  await syncGoalProgress('meals', mealCount ?? 0, dateStr);
+  const mealKcal = Math.round(
+    (mealRows ?? []).reduce((sum, row) => {
+      const included = row.is_included !== false;
+      if (!included) return sum;
+      return sum + (Number(row.energy_kcal) || 0);
+    }, 0),
+  );
+
+  await syncGoalProgress('meals', mealKcal, dateStr);
 
   // 3. Training — completed sessions only (matches syncTrainingGoal)
   const { count: workoutCount } = await supabase

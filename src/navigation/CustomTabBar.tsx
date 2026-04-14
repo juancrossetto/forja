@@ -81,6 +81,11 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({
               activeIndex={state.index}
               containerWidth={barWidth}
               slotLayouts={slotLayouts}
+              mode="top-indicator"
+              topIndicatorHeight={3}
+              topIndicatorWidthRatio={0.62}
+              topIndicatorTop={2}
+              style={styles.topIndicator}
             />
             {state.routes.map((route, index) => {
               const isFocused = state.index === index;
@@ -172,6 +177,13 @@ const styles = StyleSheet.create({
     paddingVertical: navigationChrome.containerPaddingV,
     minHeight: 54,
     zIndex: 1,
+  },
+  topIndicator: {
+    backgroundColor: navigationChrome.activeIcon,
+    borderWidth: 0,
+    shadowOpacity: 0,
+    elevation: 0,
+    borderRadius: 999,
   },
   tabButton: {
     flex: 1,

@@ -38,7 +38,7 @@ export function getGoalDisplayText(goal: DailyGoal): string {
   switch (goal.goal_type) {
     case 'meals': {
       const n = Math.max(1, Math.round(Number(goal.target_value ?? 1)));
-      return `Registrar ${n} comidas del día de hoy`;
+      return `Registrar ${n.toLocaleString('es-AR')} kcal del día de hoy`;
     }
     case 'steps': {
       const n = Math.max(1, Math.round(Number(goal.target_value ?? 1)));

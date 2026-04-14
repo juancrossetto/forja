@@ -2,8 +2,8 @@
  * Constantes del dock de submenú (AlimentacionScreen) para `bottomPad`, etc.
  * Mantener alineadas con el layout real del submenú.
  */
-export const SUBNAV_GAP_ABOVE_TABBAR = 6;
-export const SUBMENU_DOCK_HEIGHT = 64;
+export const SUBNAV_GAP_ABOVE_TABBAR = 10;
+export const SUBMENU_DOCK_HEIGHT = 82;
 
 /**
  * Toast del Plan embebido: vive dentro de `ComidasScreen`, y el área útil del padre ya

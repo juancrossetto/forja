@@ -7,7 +7,6 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
-  Image,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -22,17 +21,18 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-  resolveOrCreateFoodFromBarcodeWithImage,
   findFoodByBarcode,
-  sharedImageUrl,
   type FoodRow,
 } from '../../services/foodService';
+import {
+  fetchOpenFoodFactsByBarcode,
+  type OpenFoodFactsProduct,
+} from '../../services/openFoodFactsService';
 import {
   getMealTypeLabel,
   quickAddPhotoMealJournal,
   type MealType,
 } from '../../services/mealService';
-import { FoodImageCatalogPicker } from '../../components/nutrition/FoodImageCatalogPicker';
 import { colors } from '../../theme/colors';
 
 const C = {
@@ -55,8 +55,10 @@ type Props = {
   onMealSaved?: () => void;
   /** Si es true, solo agrega a la base de alimentos; nunca crea registro de comida diaria */
   catalogOnly?: boolean;
-  /** Modo diario: al resolver el código se abre la hoja de detalle */
+  /** Alimento ya existente en el catálogo: se abre directamente en la hoja de detalle */
   onFoodForDetail?: (food: FoodRow) => void;
+  /** Alimento nuevo encontrado en Open Food Facts: se abre para confirmar y guardar desde la hoja */
+  onDraftFood?: (product: OpenFoodFactsProduct, barcode: string) => void;
 };
 
 export function AlimentacionEscanerPanel({
@@ -65,14 +67,14 @@ export function AlimentacionEscanerPanel({
   onMealSaved,
   catalogOnly = false,
   onFoodForDetail,
+  onDraftFood,
 }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   const [mode, setMode] = useState<ScanMode>('codigo');
   const [flash, setFlash] = useState<'off' | 'on'>('off');
   const [capturing, setCapturing] = useState(false);
-  const [catalogImageKey, setCatalogImageKey] = useState<string | null>(null);
-  const [catalogPickerOpen, setCatalogPickerOpen] = useState(false);
+  const [fetching, setFetching] = useState(false);
   const barcodeLock = useRef(false);
   const scanY = useSharedValue(0);
   const frameHeight = useSharedValue(200);
@@ -130,71 +132,43 @@ export function AlimentacionEscanerPanel({
       const data = result.data?.trim();
       if (!data) return;
       barcodeLock.current = true;
+
       void (async () => {
-        let releaseOnDismiss = false;
         try {
+          // 1. Buscar en catálogo local del usuario
           const existing = await findFoodByBarcode(data);
-
-          if (catalogOnly) {
-            // ── Modo catálogo: solo gestiona la base de alimentos ──
-            if (existing) {
-              barcodeLock.current = false;
-              onFoodForDetail?.(existing);
-              return;
-            }
-            if (!catalogImageKey) {
-              barcodeLock.current = false;
-              setCatalogPickerOpen(true);
-              return;
-            }
-            const food = await resolveOrCreateFoodFromBarcodeWithImage(data, catalogImageKey);
-            if (!food) {
-              releaseOnDismiss = true;
-              Alert.alert(
-                'No encontrado',
-                'No hay producto en Open Food Facts para este código. Probá otro o cargá manualmente.',
-                [{ text: 'OK', onPress: () => { barcodeLock.current = false; } }],
-              );
-              return;
-            }
-            barcodeLock.current = false;
-            onFoodForDetail?.(food);
-            return;
-          }
-
-          // ── Modo registro diario: hoja de detalle ──
           if (existing) {
             onFoodForDetail?.(existing);
             barcodeLock.current = false;
             return;
           }
-          if (!catalogImageKey) {
-            barcodeLock.current = false;
-            setCatalogPickerOpen(true);
-            return;
-          }
-          const food = await resolveOrCreateFoodFromBarcodeWithImage(data, catalogImageKey);
-          if (!food) {
-            releaseOnDismiss = true;
+
+          // 2. Producto nuevo: buscar en Open Food Facts y mostrar el sheet para confirmar
+          setFetching(true);
+          const offProduct = await fetchOpenFoodFactsByBarcode(data);
+          setFetching(false);
+
+          if (!offProduct) {
             Alert.alert(
               'No encontrado',
-              'No hay producto en Open Food Facts para este código. Probá otro o cargá desde Buscar.',
+              'No hay producto en Open Food Facts para este código. Probá otro o cargá manualmente.',
               [{ text: 'OK', onPress: () => { barcodeLock.current = false; } }],
             );
             return;
           }
-          onFoodForDetail?.(food);
+
+          // Pasar el draft al padre para que lo abra en FoodDetailSheet
+          onDraftFood?.(offProduct, data);
           barcodeLock.current = false;
-          return;
         } catch (e) {
+          setFetching(false);
           console.warn('onBarcode error:', e);
           Alert.alert('Error', 'Ocurrió un error al procesar el código. Reintentá.');
-        } finally {
-          if (!releaseOnDismiss) barcodeLock.current = false;
+          barcodeLock.current = false;
         }
       })();
     },
-    [mode, mealTypeForLog, activeDate, onMealSaved, catalogOnly, onFoodForDetail, catalogImageKey],
+    [mode, onFoodForDetail, onDraftFood],
   );
 
   const takePhoto = async () => {
@@ -257,7 +231,7 @@ export function AlimentacionEscanerPanel({
                 'Cómo usar',
                 mode === 'foto'
                   ? 'Encuadrá la comida, tocá el disparador con borde lima o elegí una foto de la galería.'
-                  : 'Enfocá el código de barras (EAN). Si existe en Open Food Facts, cargamos los datos.',
+                  : 'Enfocá el código de barras (EAN). Si existe en Open Food Facts, cargamos los datos automáticamente.',
               )
             }
             hitSlop={12}
@@ -266,27 +240,6 @@ export function AlimentacionEscanerPanel({
           </TouchableOpacity>
         </View>
       </View>
-      {mode === 'codigo' ? (
-        <TouchableOpacity
-          style={styles.catalogImageBtn}
-          onPress={() => setCatalogPickerOpen(true)}
-          activeOpacity={0.85}
-        >
-          {catalogImageKey ? (
-            <>
-              <View style={styles.catalogImagePreviewWrap}>
-                <Image source={{ uri: sharedImageUrl(catalogImageKey) }} style={styles.catalogImagePreview} />
-              </View>
-              <Text style={styles.catalogImageBtnText}>Imagen elegida (tocar para cambiar)</Text>
-            </>
-          ) : (
-            <>
-              <MaterialCommunityIcons name="image-plus" size={18} color={C.lime} />
-              <Text style={styles.catalogImageBtnText}>Elegir imagen del catálogo *</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      ) : null}
 
       <View style={styles.modeRow}>
         <TouchableOpacity
@@ -347,6 +300,13 @@ export function AlimentacionEscanerPanel({
               />
             </Animated.View>
           )}
+          {/* Overlay de carga al consultar Open Food Facts */}
+          {fetching ? (
+            <View style={styles.fetchingOverlay}>
+              <ActivityIndicator size="large" color={C.lime} />
+              <Text style={styles.fetchingText}>Buscando producto…</Text>
+            </View>
+          ) : null}
         </View>
       </View>
 
@@ -394,12 +354,6 @@ export function AlimentacionEscanerPanel({
           ? 'Tip: buena luz lateral = mejor detección de porción después.'
           : 'El código se lee automáticamente al enfocarlo.'}
       </Text>
-      <FoodImageCatalogPicker
-        visible={catalogPickerOpen}
-        onClose={() => setCatalogPickerOpen(false)}
-        onSelect={(key) => setCatalogImageKey(key || null)}
-        currentKey={catalogImageKey}
-      />
     </View>
   );
 }
@@ -483,6 +437,20 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 0 },
   },
+  fetchingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    zIndex: 20,
+  },
+  fetchingText: {
+    color: C.lime,
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -528,34 +496,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
     lineHeight: 15,
     paddingHorizontal: 8,
-  },
-  catalogImageBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: C.surface,
-    borderWidth: 1,
-    borderColor: C.border,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-  },
-  catalogImageBtnText: {
-    color: C.text,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  catalogImagePreviewWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  catalogImagePreview: {
-    width: '100%',
-    height: '100%',
   },
   permBox: { flex: 1, justifyContent: 'center', padding: 24 },
   permText: { color: colors.text.secondary, textAlign: 'center', marginBottom: 16, lineHeight: 20 },

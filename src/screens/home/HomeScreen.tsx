@@ -5,7 +5,6 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Image,
   ImageBackground,
   RefreshControl,
   FlatList,
@@ -33,7 +32,8 @@ import { toLocalISODate } from '../../utils/dateUtils';
 type Nav = NativeStackNavigationProp<HomeStackParamList>;
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const DAY_ITEM_WIDTH = 60;
+const DAY_ITEM_WIDTH = 52;
+const HOME_TRAINING_COVER = require('../../../assets/home-training-cover.png');
 
 const COLORS = {
   bg: '#0e0e0e',
@@ -323,19 +323,17 @@ const HomeScreen: React.FC = () => {
       const isSelected = isSameDay(item.date, selectedDate);
       return (
         <TouchableOpacity
-          style={styles.dayColumn}
+          style={[styles.dayBtnEmb, isSelected && styles.dayBtnEmbActive]}
           onPress={() => setSelectedDate(new Date(item.date))}
           activeOpacity={0.7}
         >
-          <Text style={[styles.dayLabel, isSelected && styles.dayLabelActive]}>
-            {item.dayName}
+          <Text style={[styles.dayBtnEmbLabel, isSelected && styles.dayBtnEmbLabelActive]}>
+            {item.dayName.slice(0, 2)}
           </Text>
-          <View style={[styles.dayCard, isSelected && styles.dayCardActive]}>
-            <Text style={[styles.dayDate, isSelected && styles.dayDateActive]}>
-              {item.dayNumber}
-            </Text>
-          </View>
-          {item.isToday && <View style={styles.todayDot} />}
+          <Text style={[styles.dayBtnEmbNum, isSelected && styles.dayBtnEmbNumActive]}>
+            {item.dayNumber}
+          </Text>
+          <View style={[styles.dayDot, item.isToday && styles.dayDotOn]} />
         </TouchableOpacity>
       );
     },
@@ -371,54 +369,47 @@ const HomeScreen: React.FC = () => {
         scrollEventThrottle={16}
         contentContainerStyle={{ paddingTop: insets.top + HEADER_ROW_HEIGHT }}
       >
-        {/* Date Header */}
-        <View style={styles.dateSection}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.dateLabel}>{isToday ? 'HOY' : DAYS_SHORT[selectedDate.getDay()]?.toUpperCase()}</Text>
-            <Text style={styles.dateTitle}>{formatDateHeader(selectedDate)}</Text>
+        {/* Compact calendar (same visual language as Alimentación) */}
+        <View style={styles.calendarCompactWrap}>
+          <View style={styles.calendarCompactListWrap}>
+            <FlatList
+              ref={calendarRef}
+              data={calendarDays}
+              renderItem={renderCalendarDay}
+              keyExtractor={(item) => item.key}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              getItemLayout={getItemLayout}
+              initialScrollIndex={CENTER_INDEX}
+              windowSize={15}
+              maxToRenderPerBatch={21}
+              removeClippedSubviews
+              contentContainerStyle={styles.calendarCompactList}
+              onScrollToIndexFailed={(info) => {
+                setTimeout(() => {
+                  calendarRef.current?.scrollToIndex({
+                    index: info.index,
+                    animated: false,
+                    viewPosition: 0.35,
+                  });
+                }, 100);
+              }}
+            />
           </View>
-          <View style={styles.dateActions}>
-            <TouchableOpacity style={styles.todayButton} onPress={scrollToToday}>
-              <Text style={styles.todayButtonText}>Hoy</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.calendarButton} onPress={openDatePicker}>
-              <MaterialCommunityIcons name="calendar-month" size={20} color={COLORS.primary} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Infinite Week Day Scroller */}
-        <View style={styles.weekScrollerContainer}>
-          <FlatList
-            ref={calendarRef}
-            data={calendarDays}
-            renderItem={renderCalendarDay}
-            keyExtractor={(item) => item.key}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            getItemLayout={getItemLayout}
-            initialScrollIndex={CENTER_INDEX}
-            windowSize={15}
-            maxToRenderPerBatch={21}
-            removeClippedSubviews
-            onScrollToIndexFailed={(info) => {
-              setTimeout(() => {
-                calendarRef.current?.scrollToIndex({
-                  index: info.index,
-                  animated: false,
-                  viewPosition: 0.35,
-                });
-              }, 100);
-            }}
-          />
+          <TouchableOpacity
+            style={styles.calendarMiniBtn}
+            onPress={openDatePicker}
+            activeOpacity={0.8}
+            accessibilityLabel="Abrir selector de fecha"
+          >
+            <MaterialCommunityIcons name="calendar-month-outline" size={14} color={COLORS.textSecondary} />
+          </TouchableOpacity>
         </View>
 
         {/* Training Card */}
         <View style={styles.contentPadding}>
           <ImageBackground
-            source={{
-              uri: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCWVA8HVPGt0grw-MKUXC213bTRcLjgpXR2bFenAL6FpNyoiN7etNRJbRDDvc6I4yPXcta_S4OHWZVHWuSvtIeznyl7K-Xb_PyKZgxP2jyiuBb10w8TDQKKXONUBf-jravIzHZ_PMgZdmIWpiQ6sEnGsLfdCch2BRIRGqshLAoVWy4knvPB8F6ZAFCmS0TtYuHTe1KNt2O9LnvsUM-o0AN_niQGB8TeOoOt7CsFztuuMAzktfzpGEvOc3TV67xQ8_Ud02CkKYKwi6OT',
-            }}
+            source={HOME_TRAINING_COVER}
             style={styles.trainingCard}
             imageStyle={styles.trainingCardImage}
           >
@@ -446,8 +437,8 @@ const HomeScreen: React.FC = () => {
               onPress={() => navigation.navigate('CargarFotos')}
               activeOpacity={0.7}
             >
-              <View style={[styles.quickActionIcon, { backgroundColor: COLORS.surfaceHighest }]}>
-                <MaterialCommunityIcons name="camera-plus" size={20} color={COLORS.primary} />
+              <View style={styles.quickActionIcon}>
+                <MaterialCommunityIcons name="camera-plus" size={20} color={COLORS.textSecondary} />
               </View>
               <Text style={styles.quickActionTitle}>Cargar fotos</Text>
               <Text style={styles.quickActionSubtitle}>Progreso visual</Text>
@@ -458,8 +449,8 @@ const HomeScreen: React.FC = () => {
               onPress={() => navigation.navigate('PesoYMedidas')}
               activeOpacity={0.7}
             >
-              <View style={[styles.quickActionIcon, { backgroundColor: COLORS.surfaceHighest }]}>
-                <MaterialCommunityIcons name="ruler" size={20} color={COLORS.secondary} />
+              <View style={styles.quickActionIcon}>
+                <MaterialCommunityIcons name="ruler" size={20} color={COLORS.textSecondary} />
               </View>
               <Text style={styles.quickActionTitle}>Peso y Medidas</Text>
               <Text style={styles.quickActionSubtitle}>Antropométrico</Text>
@@ -672,92 +663,71 @@ const styles = StyleSheet.create({
   contentPadding: {
     paddingHorizontal: 24,
   },
-  dateSection: {
+  calendarCompactWrap: {
+    marginTop: 8,
+    marginBottom: 14,
+    paddingHorizontal: 14,
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    marginVertical: 24,
-    paddingHorizontal: 24,
-  },
-  dateLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.textTertiary,
-    letterSpacing: 2,
-    marginBottom: 8,
-  },
-  dateTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-  },
-  dateActions: {
-    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
-  todayButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+  calendarCompactListWrap: {
+    flex: 1,
+  },
+  calendarCompactList: {
+    paddingRight: 2,
+  },
+  /** Botón mínimo en gris (sin acento primary), a la derecha sin superponer */
+  calendarMiniBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
     backgroundColor: COLORS.surfaceHigh,
-    borderRadius: 8,
-  },
-  todayButtonText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-  weekScrollerContainer: {
-    marginBottom: 24,
-  },
-  dayColumn: {
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
     alignItems: 'center',
-    width: DAY_ITEM_WIDTH,
-  },
-  dayLabel: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: COLORS.textTertiary,
-    letterSpacing: 1,
-    marginBottom: 8,
-    textTransform: 'uppercase',
-  },
-  dayLabelActive: {
-    color: COLORS.primary,
-  },
-  dayCard: {
-    width: 44,
-    height: 56,
-    borderRadius: 12,
-    backgroundColor: COLORS.surfaceLow,
     justifyContent: 'center',
+  },
+  dayBtnEmb: {
+    width: DAY_ITEM_WIDTH,
     alignItems: 'center',
+    marginRight: 2,
+    paddingVertical: 6,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: 'transparent',
   },
-  dayCardActive: {
-    backgroundColor: COLORS.primary,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+  dayBtnEmbActive: {
+    borderColor: `${COLORS.primary}66`,
+    backgroundColor: 'rgba(209, 255, 38, 0.1)',
   },
-  dayDate: {
-    fontSize: 16,
+  dayBtnEmbLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.textTertiary,
+    letterSpacing: 0.2,
+  },
+  dayBtnEmbLabelActive: {
+    color: COLORS.primary,
+  },
+  dayBtnEmbNum: {
+    fontSize: 15,
     fontWeight: '700',
     color: COLORS.textPrimary,
+    marginTop: 2,
   },
-  dayDateActive: {
-    color: '#000',
+  dayBtnEmbNumActive: {
+    color: COLORS.textPrimary,
   },
-  todayDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: COLORS.primary,
+  dayDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
     marginTop: 6,
+    backgroundColor: 'transparent',
+  },
+  dayDotOn: {
+    backgroundColor: COLORS.secondary,
   },
   trainingCard: {
     height: 192,
@@ -821,24 +791,27 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   quickActionIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
+    width: 24,
+    height: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   quickActionTitle: {
     fontSize: 14,
     fontWeight: '700',
     color: COLORS.textPrimary,
     marginBottom: 4,
+    textAlign: 'center',
   },
   quickActionSubtitle: {
     fontSize: 11,
     color: COLORS.textTertiary,
+    textAlign: 'center',
   },
   // Session Card
   sessionCard: {
@@ -860,23 +833,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: 'rgba(255,115,74,0.15)',
+    backgroundColor: 'rgba(209,255,38,0.15)',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255,115,74,0.3)',
+    borderColor: 'rgba(209,255,38,0.3)',
   },
   sessionLiveDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: COLORS.tertiary,
+    backgroundColor: COLORS.primary,
   },
   sessionLiveText: {
     fontSize: 9,
     fontWeight: '700',
-    color: COLORS.tertiary,
+    color: COLORS.primary,
     letterSpacing: 1.5,
   },
   sessionTimeRow: {
@@ -1097,14 +1070,6 @@ const styles = StyleSheet.create({
     color: COLORS.textTertiary,
     minWidth: 75,
     textAlign: 'right',
-  },
-  calendarButton: {
-    width: 36,
-    height: 36,
-    backgroundColor: COLORS.surfaceHigh,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   pickerOverlay: {
     flex: 1,

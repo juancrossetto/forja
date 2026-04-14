@@ -7,9 +7,9 @@ import {
   TouchableWithoutFeedback,
   Animated,
   Dimensions,
-  Platform,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -43,6 +43,9 @@ interface AddMenuOverlayProps {
   onSelectMeasurements?: () => void;
 }
 
+/** Altura aproximada de la tab bar (pill + padding), sin safe area */
+const TAB_BAR_HEIGHT = 70;
+
 const AddMenuOverlay: React.FC<AddMenuOverlayProps> = ({
   visible,
   onClose,
@@ -54,6 +57,7 @@ const AddMenuOverlay: React.FC<AddMenuOverlayProps> = ({
   onSelectPhotos = () => {},
   onSelectMeasurements = () => {},
 }) => {
+  const insets = useSafeAreaInsets();
   const backdropAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
 
@@ -110,7 +114,10 @@ const AddMenuOverlay: React.FC<AddMenuOverlayProps> = ({
       <Animated.View
         style={[
           styles.menuContainer,
-          { transform: [{ translateY: slideAnim }] },
+          {
+            transform: [{ translateY: slideAnim }],
+            paddingBottom: insets.bottom + TAB_BAR_HEIGHT,
+          },
         ]}
         pointerEvents={visible ? 'auto' : 'none'}
       >
@@ -245,7 +252,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     paddingHorizontal: 24,
-    paddingBottom: Platform.OS === 'ios' ? 48 : 32,
     paddingTop: 8,
   },
   header: {

@@ -13,7 +13,7 @@ export const navigationChrome = {
     backgroundColor: colors.surface.elevated,
     borderWidth: 1,
     borderColor: colors.border.default,
-    borderRadius: 10,
+    borderRadius: 20,
   },
   /** Margen respecto a los bordes de pantalla */
   screenEdgeInset: 14,
@@ -39,7 +39,7 @@ export const navigationChrome = {
     elevation: 3,
   },
   /** Radio del highlight interno (proporcionalmente menor que el contenedor) */
-  pillRadius: 8,
+  pillRadius: 16,
   inactiveIcon: 'rgba(255, 255, 255, 0.4)',
   activeIcon: colors.primary.default,
 } as const;

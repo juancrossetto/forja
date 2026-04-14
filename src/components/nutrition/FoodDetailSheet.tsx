@@ -35,6 +35,17 @@ import {
 
 const MEAL_ORDER: MealType[] = ['DES', 'ALM', 'MER', 'CEN'];
 
+type PortionUnit = { key: string; label: string; grams: number };
+type CookingState = 'crudo' | 'cocido';
+
+const PORTION_UNITS: PortionUnit[] = [
+  { key: 'g',    label: 'gramos',     grams: 1 },
+  { key: 'oz',   label: 'onzas',      grams: 28 },
+  { key: 'tbsp', label: 'cucharada',  grams: 12 },
+  { key: 'fist', label: 'puño',       grams: 200 },
+  { key: 'cup',  label: 'taza',       grams: 200 },
+];
+
 export type FoodDetailPayload =
   | {
       kind: 'food';
@@ -89,7 +100,11 @@ const D = {
 
 export function FoodDetailSheet({ visible, onClose, payload, onAdded, onFoodFavoriteChange, onFoodDeleted }: Props) {
   const insets = useSafeAreaInsets();
-  const [gramsStr, setGramsStr] = useState('100');
+  const [qtyStr, setQtyStr] = useState('100');
+  const [selectedUnit, setSelectedUnit] = useState<PortionUnit>(PORTION_UNITS[0]);
+  const [unitPickerOpen, setUnitPickerOpen] = useState(false);
+  const [cookingState, setCookingState] = useState<CookingState>('crudo');
+  const [cookingPickerOpen, setCookingPickerOpen] = useState(false);
   const [mealType, setMealType] = useState<MealType>('DES');
   const [infoOpen, setInfoOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -139,10 +154,14 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded, onFoodFavo
         Number(payload.food.default_serving_grams) > 0
           ? Math.round(Number(payload.food.default_serving_grams))
           : 100;
-      setGramsStr(String(g));
+      setQtyStr(String(g));
+      setSelectedUnit(PORTION_UNITS[0]);
       setMealType(payload.mealType);
     }
     setInfoOpen(false);
+    setUnitPickerOpen(false);
+    setCookingPickerOpen(false);
+    setCookingState('crudo');
     if (payload?.kind === 'food') {
       setFavorite(!!payload.food.is_favorite);
     } else {
@@ -151,12 +170,16 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded, onFoodFavo
     translateY.setValue(0);
   }, [visible, payload]);
 
+  const computedGrams = useMemo(() => {
+    const qtyNum = parseFloat(qtyStr.replace(',', '.'));
+    const q = Number.isFinite(qtyNum) && qtyNum > 0 ? qtyNum : 1;
+    return Math.max(1, Math.round(q * selectedUnit.grams));
+  }, [qtyStr, selectedUnit]);
+
   const totalsFood = useMemo(() => {
     if (!food) return null;
-    const parsed = parseFloat(gramsStr.replace(',', '.'));
-    const g = Math.max(1, Math.round(Number.isFinite(parsed) ? parsed : 100));
-    return macrosForGrams(food.kcal_100g, food.protein_g_100g, food.carbs_g_100g, food.fat_g_100g, g);
-  }, [food, gramsStr]);
+    return macrosForGrams(food.kcal_100g, food.protein_g_100g, food.carbs_g_100g, food.fat_g_100g, computedGrams);
+  }, [food, computedGrams]);
 
   const barFood = useMemo(() => {
     if (!totalsFood) return null;
@@ -182,16 +205,22 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded, onFoodFavo
 
   const handleAdd = useCallback(async () => {
     if (!food || !payload || payload.kind !== 'food') return;
-    const parsed = parseFloat(gramsStr.replace(',', '.'));
-    const g = Math.max(1, Math.round(Number.isFinite(parsed) ? parsed : 100));
     setSaving(true);
     try {
-      const ok = await addMealFromFoodWithPortion(food, mealType, payload.dateISO, g);
+      const brandPrefix = food.brand ? `${food.brand} · ` : '';
+      const baseName = `${brandPrefix}${food.name}`.trim();
+      const stateSuffix = cookingState === 'cocido' ? ' (cocido)' : ' (crudo)';
+      const displayName = `${baseName}${stateSuffix}`;
+      const photoUri = resolveImageUrl(food);
+      const ok = await addMealFromFoodWithPortion(food, mealType, payload.dateISO, computedGrams, {
+        productDisplayName: displayName,
+        photoUri,
+      });
       if (ok) { onAdded?.(); onClose(); }
     } finally {
       setSaving(false);
     }
-  }, [food, payload, gramsStr, mealType, onAdded, onClose]);
+  }, [food, payload, computedGrams, mealType, cookingState, onAdded, onClose]);
 
   const pickMeal = useCallback(() => {
     Alert.alert(
@@ -325,7 +354,7 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded, onFoodFavo
 
             {showAdd && food && totalsFood ? (
               <Text style={styles.portionHint}>
-                Datos según {gramsStr.trim() || '100'} g
+                {computedGrams} g
                 {food.default_serving_grams ? ` · porción típica ${food.default_serving_grams} g` : ''}
               </Text>
             ) : log ? (
@@ -414,28 +443,113 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded, onFoodFavo
               </View>
             ) : null}
 
-            {/* Inputs gramos / porción */}
+            {/* Cantidad / Porción / Tipo de Peso */}
             {showAdd && food ? (
-              <View style={styles.inputsRow}>
-                <View style={styles.inputBox}>
-                  <Text style={styles.inputLabel}>Gramos</Text>
-                  <TextInput
-                    style={styles.inputField}
-                    keyboardType="number-pad"
-                    value={gramsStr}
-                    onChangeText={setGramsStr}
-                    placeholder="100"
-                    placeholderTextColor={D.textSoft}
-                  />
+              <View style={styles.portionSection}>
+                <View style={styles.portionRow}>
+                  {/* Cantidad */}
+                  <View style={[styles.portionCell, styles.portionCellQty]}>
+                    <Text style={styles.portionCellLabel}>Cantidad</Text>
+                    <TextInput
+                      style={styles.portionQtyInput}
+                      keyboardType="decimal-pad"
+                      value={qtyStr}
+                      onChangeText={setQtyStr}
+                      placeholder="1"
+                      placeholderTextColor={D.textSoft}
+                    />
+                  </View>
+                  {/* Porción */}
+                  <TouchableOpacity
+                    style={[styles.portionCell, styles.portionCellUnit, unitPickerOpen && styles.portionCellOpen]}
+                    onPress={() => { setUnitPickerOpen((v) => !v); setCookingPickerOpen(false); }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.portionCellLabel}>Porción</Text>
+                    <View style={styles.portionCellValue}>
+                      <Text style={styles.portionCellValueText} numberOfLines={1}>
+                        {selectedUnit.key === 'g'
+                          ? 'gramos'
+                          : `${selectedUnit.label}  (${selectedUnit.grams} g)`}
+                      </Text>
+                      <MaterialCommunityIcons
+                        name={unitPickerOpen ? 'chevron-up' : 'chevron-down'}
+                        size={16}
+                        color={D.textMuted}
+                      />
+                    </View>
+                  </TouchableOpacity>
+                  {/* Tipo de Peso */}
+                  <TouchableOpacity
+                    style={[styles.portionCell, styles.portionCellCooking, cookingPickerOpen && styles.portionCellOpen]}
+                    onPress={() => { setCookingPickerOpen((v) => !v); setUnitPickerOpen(false); }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.portionCellLabel}>Tipo de Peso</Text>
+                    <View style={styles.portionCellValue}>
+                      <Text style={styles.portionCellValueText} numberOfLines={1}>
+                        {cookingState === 'crudo' ? 'Crudo' : 'Cocido'}
+                      </Text>
+                      <MaterialCommunityIcons
+                        name={cookingPickerOpen ? 'chevron-up' : 'chevron-down'}
+                        size={16}
+                        color={D.textMuted}
+                      />
+                    </View>
+                  </TouchableOpacity>
                 </View>
-                <View style={[styles.inputBox, { flex: 1.4 }]}>
-                  <Text style={styles.inputLabel}>Porción</Text>
-                  <Text style={styles.inputStatic} numberOfLines={2}>
-                    {food.default_serving_grams
-                      ? `Referencia ${food.default_serving_grams} g`
-                      : 'Ajustá los gramos'}
-                  </Text>
-                </View>
+
+                {/* Unit picker dropdown */}
+                {unitPickerOpen ? (
+                  <View style={styles.pickerDropdown}>
+                    {PORTION_UNITS.map((unit) => (
+                      <TouchableOpacity
+                        key={unit.key}
+                        style={styles.pickerOption}
+                        onPress={() => {
+                          if (unit.key !== selectedUnit.key) {
+                            setQtyStr(unit.key === 'g' ? String(computedGrams) : '1');
+                          }
+                          setSelectedUnit(unit);
+                          setUnitPickerOpen(false);
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        {selectedUnit.key === unit.key ? (
+                          <MaterialCommunityIcons name="check" size={16} color={colors.primary.default} style={styles.pickerCheck} />
+                        ) : (
+                          <View style={styles.pickerCheckPlaceholder} />
+                        )}
+                        <Text style={[styles.pickerOptionText, selectedUnit.key === unit.key && styles.pickerOptionTextActive]}>
+                          {unit.key === 'g' ? 'gramos' : `${unit.label}  (${unit.grams} g)`}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : null}
+
+                {/* Cooking state picker dropdown */}
+                {cookingPickerOpen ? (
+                  <View style={styles.pickerDropdown}>
+                    {(['crudo', 'cocido'] as CookingState[]).map((state) => (
+                      <TouchableOpacity
+                        key={state}
+                        style={styles.pickerOption}
+                        onPress={() => { setCookingState(state); setCookingPickerOpen(false); }}
+                        activeOpacity={0.8}
+                      >
+                        {cookingState === state ? (
+                          <MaterialCommunityIcons name="check" size={16} color={colors.primary.default} style={styles.pickerCheck} />
+                        ) : (
+                          <View style={styles.pickerCheckPlaceholder} />
+                        )}
+                        <Text style={[styles.pickerOptionText, cookingState === state && styles.pickerOptionTextActive]}>
+                          {state === 'crudo' ? 'Crudo' : 'Cocido'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : null}
               </View>
             ) : null}
 
@@ -471,10 +585,6 @@ export function FoodDetailSheet({ visible, onClose, payload, onAdded, onFoodFavo
                     </>
                   )}
                 </View>
-                <TouchableOpacity style={styles.deleteBtn} onPress={handleDeleteFromCatalog} activeOpacity={0.88}>
-                  <MaterialCommunityIcons name="trash-can-outline" size={18} color="#f08a8a" />
-                  <Text style={styles.deleteBtnText}>Eliminar de mi lista</Text>
-                </TouchableOpacity>
               </>
             ) : (
               <TouchableOpacity style={styles.secondaryBtn} onPress={onClose} activeOpacity={0.9}>
@@ -720,38 +830,93 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
 
-  inputsRow: {
-    flexDirection: 'row',
-    gap: 10,
+  portionSection: {
     marginTop: 18,
   },
-  inputBox: {
+  portionRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  portionCell: {
     flex: 1,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: D.border,
+    backgroundColor: D.surface,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    backgroundColor: D.surface,
+    justifyContent: 'space-between',
   },
-  inputLabel: {
-    fontSize: 10,
+  portionCellQty: {
+    flex: 0.65,
+  },
+  portionCellUnit: {
+    flex: 1.5,
+  },
+  portionCellCooking: {
+    flex: 1,
+  },
+  portionCellOpen: {
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+  portionCellLabel: {
+    fontSize: 9,
     fontWeight: '700',
     color: D.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.4,
     marginBottom: 6,
   },
-  inputField: {
+  portionQtyInput: {
     fontSize: 18,
     fontWeight: '700',
     color: D.text,
     padding: 0,
   },
-  inputStatic: {
+  portionCellValue: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 4,
+  },
+  portionCellValueText: {
     fontSize: 13,
     fontWeight: '600',
+    color: D.text,
+    flex: 1,
+  },
+  pickerDropdown: {
+    marginTop: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: D.borderMed,
+    backgroundColor: D.surfaceHi,
+    overflow: 'hidden',
+  },
+  pickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: D.border,
+  },
+  pickerCheck: {
+    marginRight: 12,
+  },
+  pickerCheckPlaceholder: {
+    width: 16,
+    height: 16,
+    marginRight: 12,
+  },
+  pickerOptionText: {
+    fontSize: 15,
     color: D.textMuted,
+    fontWeight: '500',
+  },
+  pickerOptionTextActive: {
+    color: D.text,
+    fontWeight: '700',
   },
   offAttr: {
     fontSize: 10,

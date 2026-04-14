@@ -175,6 +175,7 @@ export async function addMealFromFoodWithPortion(
   mealType: MealType,
   dateISO: string,
   grams: number,
+  opts?: { productDisplayName?: string; photoUri?: string | null },
 ): Promise<boolean> {
   const g = Math.max(1, Math.round(grams));
   const m = macrosForGrams(
@@ -187,12 +188,13 @@ export async function addMealFromFoodWithPortion(
   const macro_source: MealMacroSource =
     food.source === 'openfoodfacts' ? 'openfoodfacts' : 'catalog';
   const brandPrefix = food.brand ? `${food.brand} · ` : '';
+  const defaultDisplayName = `${brandPrefix}${food.name}`.trim();
   return saveMealLog({
     date: dateISO,
     meal_type: mealType,
     title: food.name,
     food_id: food.id,
-    product_display_name: `${brandPrefix}${food.name}`.trim(),
+    product_display_name: opts?.productDisplayName ?? defaultDisplayName,
     openfoodfacts_code: food.openfoodfacts_code ?? food.barcode ?? undefined,
     macro_source,
     portion_grams: g,
@@ -200,6 +202,7 @@ export async function addMealFromFoodWithPortion(
     protein_g: m.protein_g,
     carbs_g: m.carbs_g,
     fat_g: m.fat_g,
+    photo_uri: opts?.photoUri ?? undefined,
   });
 }
 
